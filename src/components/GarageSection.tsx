@@ -21,6 +21,14 @@ export const GarageSection: React.FC = () => {
   const [activeTuningTab, setActiveTuningTab] = useState<'ecu' | 'components' | 'driving'>('ecu');
   const [ecuStage, setEcuStage] = useState<'stage1' | 'stage2' | 'track'>('stage2');
 
+  const getStagePeakRpm = (stage: 'stage1' | 'stage2' | 'track') => {
+    return stage === 'stage1' ? 7200 : stage === 'stage2' ? 7900 : 8500;
+  };
+
+  const getStageIdleRpm = (stage: 'stage1' | 'stage2' | 'track') => {
+    return stage === 'stage1' ? 950 : stage === 'stage2' ? 1050 : 1150;
+  };
+
   const getBaseBoost = (stage: 'stage1' | 'stage2' | 'track') => {
     return stage === 'stage1' ? 0.3 : stage === 'stage2' ? 0.4 : 0.5;
   };
@@ -30,14 +38,30 @@ export const GarageSection: React.FC = () => {
   };
 
   const getStageIntensity = (stage: 'stage1' | 'stage2' | 'track') => {
-    return stage === 'stage1' ? 1.0 : stage === 'stage2' ? 1.15 : 1.35;
+    return stage === 'stage1' ? 1.0 : stage === 'stage2' ? 1.18 : 1.38;
   };
 
   const getPowerAfr = (stage: 'stage1' | 'stage2' | 'track') => {
     return stage === 'stage1' ? 12.4 : stage === 'stage2' ? 11.8 : 11.2;
   };
 
+  const getStageTorque = (stage: 'stage1' | 'stage2' | 'track', isRev: boolean) => {
+    if (!isRev) {
+      return stage === 'stage1' ? 75 : stage === 'stage2' ? 90 : 110;
+    }
+    return stage === 'stage1' ? 783 : stage === 'stage2' ? 858 : 928;
+  };
+
+  const getStageHp = (stage: 'stage1' | 'stage2' | 'track', isRev: boolean) => {
+    if (!isRev) {
+      return stage === 'stage1' ? 32 : stage === 'stage2' ? 38 : 45;
+    }
+    return stage === 'stage1' ? 845 : stage === 'stage2' ? 895 : 950;
+  };
+
   const [currentBoost, setCurrentBoost] = useState(0.4);
+  const [currentTorque, setCurrentTorque] = useState(90);
+  const [currentHp, setCurrentHp] = useState(38);
   const [currentAfr, setCurrentAfr] = useState(14.7);
   const [afrState, setAfrState] = useState<'stoich' | 'rich' | 'lean'>('stoich');
 
@@ -55,8 +79,10 @@ export const GarageSection: React.FC = () => {
           // Engine has started and sound has cleanly stopped
           setIsStarting(false);
           setIsIgnited(true);
-          setCurrentRpm(1100);
+          setCurrentRpm(getStageIdleRpm(ecuStage));
           setCurrentBoost(getBaseBoost(ecuStage));
+          setCurrentTorque(getStageTorque(ecuStage, false));
+          setCurrentHp(getStageHp(ecuStage, false));
           setCurrentAfr(14.7);
           setAfrState('stoich');
         }
@@ -66,6 +92,8 @@ export const GarageSection: React.FC = () => {
       setIsIgnited(false);
       setCurrentRpm(0);
       setCurrentBoost(0.0);
+      setCurrentTorque(0);
+      setCurrentHp(0);
       setCurrentAfr(0);
       setAfrState('stoich');
     }
@@ -74,7 +102,10 @@ export const GarageSection: React.FC = () => {
   const handleSelectStage = (stage: 'stage1' | 'stage2' | 'track') => {
     setEcuStage(stage);
     if (isIgnited && !isRevving) {
+      setCurrentRpm(getStageIdleRpm(stage));
       setCurrentBoost(getBaseBoost(stage));
+      setCurrentTorque(getStageTorque(stage, false));
+      setCurrentHp(getStageHp(stage, false));
     }
   };
 
@@ -86,12 +117,17 @@ export const GarageSection: React.FC = () => {
     const intensity = getStageIntensity(ecuStage);
     playEngineRevSound(intensity);
 
-    const peak = getPeakBoost(ecuStage);
+    const peakRpm = getStagePeakRpm(ecuStage);
+    const peakBoost = getPeakBoost(ecuStage);
+    const peakTorque = getStageTorque(ecuStage, true);
+    const peakHp = getStageHp(ecuStage, true);
     const powerAfr = getPowerAfr(ecuStage);
 
-    // Initial rev surge: RPM shoots up, boost spools, AFR enriches for power
-    setCurrentRpm(7450);
-    setCurrentBoost(peak);
+    // Initial rev surge: RPM shoots up to stage peak, boost spools, torque climbs, AFR enriches
+    setCurrentRpm(peakRpm);
+    setCurrentBoost(peakBoost);
+    setCurrentTorque(peakTorque);
+    setCurrentHp(peakHp);
     setCurrentAfr(powerAfr);
     setAfrState('rich');
 
@@ -101,10 +137,12 @@ export const GarageSection: React.FC = () => {
       setAfrState('lean');
     }, 550);
 
-    // Return cleanly to stoichiometric idle
+    // Return cleanly to idle specifications for this stage
     setTimeout(() => {
-      setCurrentRpm(1100);
+      setCurrentRpm(getStageIdleRpm(ecuStage));
       setCurrentBoost(getBaseBoost(ecuStage));
+      setCurrentTorque(getStageTorque(ecuStage, false));
+      setCurrentHp(getStageHp(ecuStage, false));
       setCurrentAfr(14.7);
       setAfrState('stoich');
       setIsRevving(false);
@@ -220,16 +258,16 @@ export const GarageSection: React.FC = () => {
               : 'opacity-50 blur-[1px] pointer-events-none'
           }`}
         >
-          {/* Live Dyno Gauges Strip */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+          {/* Live Dyno Gauges Strip (5 Comprehensive Telemetry Meters) */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-10">
             {/* RPM Meter */}
             <div className={`p-5 rounded-2xl bg-neutral-900/60 border transition-all duration-300 relative overflow-hidden ${
               isRevving ? 'border-red-500/80 shadow-[0_0_25px_rgba(239,68,68,0.3)]' : 'border-neutral-800'
             }`}>
               <div className="flex items-center justify-between text-xs font-mono text-neutral-400 mb-2">
                 <span>TACHOMETER</span>
-                <span className={isRevving ? 'text-red-400 font-bold animate-pulse' : 'text-red-400'}>
-                  {isRevving ? '🔥 SURGING TO REDLINE' : 'REDLINE 8500'}
+                <span className={isRevving ? 'text-red-400 font-bold animate-pulse text-[10px]' : 'text-red-400 text-[10px]'}>
+                  {isRevving ? '🔥 SURGING TO REDLINE' : `LIMIT ${getStagePeakRpm(ecuStage)}`}
                 </span>
               </div>
               <div className="text-3xl font-black font-mono text-white mb-1">
@@ -280,6 +318,38 @@ export const GarageSection: React.FC = () => {
               </div>
               <div className="text-[11px] text-neutral-400 mt-3">
                 {isRevving ? 'Overboost spooling under throttle load' : 'Twin-scroll twin-turbo spool'}
+              </div>
+            </div>
+
+            {/* Torque & Power Dyno Meter */}
+            <div className={`p-5 rounded-2xl bg-neutral-900/60 border transition-all duration-300 relative overflow-hidden ${
+              isRevving ? 'border-amber-400/80 shadow-[0_0_25px_rgba(251,191,36,0.25)]' : 'border-neutral-800'
+            }`}>
+              <div className="flex items-center justify-between text-xs font-mono text-neutral-400 mb-2">
+                <span>TORQUE OUTPUT</span>
+                <span className={isRevving ? 'text-amber-400 font-bold animate-pulse text-[10px]' : 'text-neutral-500 text-[10px]'}>
+                  {isRevving ? `⚡ +${ecuStage === 'stage1' ? '65' : ecuStage === 'stage2' ? '140' : '210'} Nm GAIN` : 'DYNO TORQUE'}
+                </span>
+              </div>
+              <div className="text-3xl font-black font-mono text-amber-400 mb-1 flex items-baseline gap-1">
+                <span>{isIgnited ? currentTorque : '0'}</span>
+                <span className="text-xs text-neutral-500 font-normal">Nm</span>
+                {isIgnited && (
+                  <span className="text-xs font-mono text-neutral-400 ml-1">
+                    ({currentHp} HP)
+                  </span>
+                )}
+              </div>
+              <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden mt-3">
+                <div
+                  className="bg-gradient-to-r from-amber-400 via-orange-500 to-red-500 h-full transition-all duration-200"
+                  style={{ width: `${Math.min((currentTorque / 1000) * 100, 100)}%` }}
+                />
+              </div>
+              <div className="text-[11px] text-neutral-400 mt-3">
+                {isRevving
+                  ? `${ecuStage === 'stage1' ? 'Stage 1 OEM+' : ecuStage === 'stage2' ? 'Stage 2 High-Flow' : 'Track Dyno Unlocked'} peak output`
+                  : 'Parasitic idle torque baseline'}
               </div>
             </div>
 
@@ -360,7 +430,13 @@ export const GarageSection: React.FC = () => {
               <div className="text-3xl font-black font-mono text-emerald-400 mb-1">
                 94° <span className="text-xs text-neutral-500 font-normal">CELSIUS</span>
               </div>
-              <div className="text-[11px] text-neutral-400 mt-2">Optimal operating temperature</div>
+              <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden mt-3">
+                <div
+                  className="bg-emerald-400 h-full"
+                  style={{ width: isIgnited ? '72%' : '0%' }}
+                />
+              </div>
+              <div className="text-[11px] text-neutral-400 mt-3">Optimal operating temperature</div>
             </div>
           </div>
 
@@ -434,37 +510,90 @@ export const GarageSection: React.FC = () => {
               {/* ECU Parameter Matrix */}
               <div className="lg:col-span-2 p-6 rounded-2xl bg-neutral-900/50 border border-neutral-800">
                 <div className="flex items-center justify-between mb-4">
-                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-widest">
-                    ACTIVE PARAMETER CALIBRATION
+                  <div className="text-xs font-mono text-neutral-400 uppercase tracking-widest flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full ${isRevving ? 'bg-amber-400 animate-ping' : 'bg-emerald-400'}`} />
+                    <span>ACTIVE PARAMETER CALIBRATION</span>
                   </div>
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/40">
-                    CHECKSUM VALIDATED
+                  <span className={`text-xs font-mono px-2 py-0.5 rounded border transition-colors ${
+                    isRevving
+                      ? 'bg-amber-950/80 text-amber-300 border-amber-500/50 animate-pulse'
+                      : 'bg-emerald-950 text-emerald-400 border border-emerald-800/40'
+                  }`}>
+                    {isRevving ? '⚡ DYNAMIC LOAD DETECTED' : 'CHECKSUM VALIDATED'}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl bg-black/50 border border-neutral-800">
+                  <div className={`p-4 rounded-xl bg-black/50 border transition-all duration-200 ${
+                    isRevving ? 'border-amber-500/60 bg-amber-950/20 shadow-md' : 'border-neutral-800'
+                  }`}>
                     <div className="text-xs text-neutral-400 mb-1">Ignition Timing Advance</div>
-                    <div className="text-lg font-bold font-mono text-white">+5.2° BTDC</div>
-                    <p className="text-[11px] text-neutral-500 mt-1">Calibrated to prevent pre-ignition knock at high boost</p>
+                    <div className="text-lg font-bold font-mono text-white">
+                      {!isIgnited
+                        ? '--.-° BTDC'
+                        : isRevving
+                        ? (ecuStage === 'stage1' ? '+24.5° BTDC' : ecuStage === 'stage2' ? '+28.2° BTDC' : '+33.0° BTDC')
+                        : '+12.0° BTDC'}
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {isRevving
+                        ? 'Advancing ignition spark for maximum cylinder flame velocity'
+                        : 'Calibrated base idle timing table with anti-knock guard'}
+                    </p>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-black/50 border border-neutral-800">
+                  <div className={`p-4 rounded-xl bg-black/50 border transition-all duration-200 ${
+                    isRevving ? 'border-cyan-500/60 bg-cyan-950/20 shadow-md' : 'border-neutral-800'
+                  }`}>
                     <div className="text-xs text-neutral-400 mb-1">Variable Valve Timing (VVT)</div>
-                    <div className="text-lg font-bold font-mono text-white">Aggressive Overlap</div>
-                    <p className="text-[11px] text-neutral-500 mt-1">Optimized scavenge velocity across top RPM band</p>
+                    <div className="text-lg font-bold font-mono text-white">
+                      {!isIgnited
+                        ? 'OFFLINE'
+                        : isRevving
+                        ? (ecuStage === 'stage1' ? '+18.0° Overlap' : ecuStage === 'stage2' ? '+26.5° Overlap' : '+34.0° Extreme Overlap')
+                        : '0.0° Neutral Cam Phase'}
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {isRevving
+                        ? 'Aggressive cam overlap scavenging exhaust pulse under high boost'
+                        : 'Optimized idle emissions and smooth idle combustion profile'}
+                    </p>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-black/50 border border-neutral-800">
-                    <div className="text-xs text-neutral-400 mb-1">Throttle Map Sensitivity</div>
-                    <div className="text-lg font-bold font-mono text-white">1:1 Linear Sport</div>
-                    <p className="text-[11px] text-neutral-500 mt-1">Eliminates drive-by-wire latency for instant throttle response</p>
+                  <div className={`p-4 rounded-xl bg-black/50 border transition-all duration-200 ${
+                    isRevving ? 'border-purple-500/60 bg-purple-950/20 shadow-md' : 'border-neutral-800'
+                  }`}>
+                    <div className="text-xs text-neutral-400 mb-1">Throttle & Injector Duty (IDC)</div>
+                    <div className="text-lg font-bold font-mono text-white">
+                      {!isIgnited
+                        ? '0.0% IDC'
+                        : isRevving
+                        ? (ecuStage === 'stage1' ? '72.4% IDC (14.8ms)' : ecuStage === 'stage2' ? '84.6% IDC (17.2ms)' : '94.8% IDC (20.4ms)')
+                        : '2.4% IDC (1.1ms)'}
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {isRevving
+                        ? 'Wide-open throttle high-flow injection delivering peak mass flow'
+                        : 'Linear drive-by-wire calibration with instant off-idle response'}
+                    </p>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-black/50 border border-neutral-800">
-                    <div className="text-xs text-neutral-400 mb-1">Speed Limiter & Burble Map</div>
-                    <div className="text-lg font-bold font-mono text-white">Unrestricted + Pop/Overrun</div>
-                    <p className="text-[11px] text-neutral-500 mt-1">Clean deceleration burble with catalytic protection</p>
+                  <div className={`p-4 rounded-xl bg-black/50 border transition-all duration-200 ${
+                    isRevving ? 'border-red-500/60 bg-red-950/20 shadow-md' : 'border-neutral-800'
+                  }`}>
+                    <div className="text-xs text-neutral-400 mb-1">Cylinder Combustion Load (BMEP)</div>
+                    <div className="text-lg font-bold font-mono text-white">
+                      {!isIgnited
+                        ? '0.0 BAR BMEP'
+                        : isRevving
+                        ? (ecuStage === 'stage1' ? '21.5 BAR BMEP' : ecuStage === 'stage2' ? '26.8 BAR BMEP' : '32.4 BAR BMEP')
+                        : '1.8 BAR BMEP'}
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      {isRevving
+                        ? '🔥 Active overrun burble, pops & flame map active on decel'
+                        : 'Clean deceleration overrun with catalytic thermal protection'}
+                    </p>
                   </div>
                 </div>
               </div>
