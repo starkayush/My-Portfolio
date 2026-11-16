@@ -29,7 +29,17 @@ export const GarageSection: React.FC = () => {
     return stage === 'stage1' ? 1.6 : stage === 'stage2' ? 2.2 : 2.9;
   };
 
+  const getStageIntensity = (stage: 'stage1' | 'stage2' | 'track') => {
+    return stage === 'stage1' ? 1.0 : stage === 'stage2' ? 1.15 : 1.35;
+  };
+
+  const getPowerAfr = (stage: 'stage1' | 'stage2' | 'track') => {
+    return stage === 'stage1' ? 12.4 : stage === 'stage2' ? 11.8 : 11.2;
+  };
+
   const [currentBoost, setCurrentBoost] = useState(0.4);
+  const [currentAfr, setCurrentAfr] = useState(14.7);
+  const [afrState, setAfrState] = useState<'stoich' | 'rich' | 'lean'>('stoich');
 
   const handleToggleEngine = () => {
     if (isStarting) return;
@@ -47,6 +57,8 @@ export const GarageSection: React.FC = () => {
           setIsIgnited(true);
           setCurrentRpm(1100);
           setCurrentBoost(getBaseBoost(ecuStage));
+          setCurrentAfr(14.7);
+          setAfrState('stoich');
         }
       );
     } else {
@@ -54,6 +66,8 @@ export const GarageSection: React.FC = () => {
       setIsIgnited(false);
       setCurrentRpm(0);
       setCurrentBoost(0.0);
+      setCurrentAfr(0);
+      setAfrState('stoich');
     }
   };
 
@@ -67,15 +81,32 @@ export const GarageSection: React.FC = () => {
   const handleQuickRev = () => {
     if (!isIgnited || isRevving) return;
     setIsRevving(true);
-    playEngineRevSound();
+
+    // Play enhanced matching engine rev sound scaled to current stage
+    const intensity = getStageIntensity(ecuStage);
+    playEngineRevSound(intensity);
 
     const peak = getPeakBoost(ecuStage);
+    const powerAfr = getPowerAfr(ecuStage);
+
+    // Initial rev surge: RPM shoots up, boost spools, AFR enriches for power
     setCurrentRpm(7450);
     setCurrentBoost(peak);
+    setCurrentAfr(powerAfr);
+    setAfrState('rich');
 
+    // On throttle lift (~550ms): Overrun fuel cutoff causes momentary lean sweep
+    setTimeout(() => {
+      setCurrentAfr(17.4);
+      setAfrState('lean');
+    }, 550);
+
+    // Return cleanly to stoichiometric idle
     setTimeout(() => {
       setCurrentRpm(1100);
       setCurrentBoost(getBaseBoost(ecuStage));
+      setCurrentAfr(14.7);
+      setAfrState('stoich');
       setIsRevving(false);
     }, 950);
   };
@@ -253,12 +284,74 @@ export const GarageSection: React.FC = () => {
             </div>
 
             {/* Air-Fuel Ratio (AFR) */}
-            <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800">
-              <div className="text-xs font-mono text-neutral-400 mb-2">WIDEBAND AFR</div>
-              <div className="text-3xl font-black font-mono text-amber-400 mb-1">
-                12.4 <span className="text-xs text-neutral-500 font-normal">: 1</span>
+            <div className={`p-5 rounded-2xl bg-neutral-900/60 border transition-all duration-300 relative overflow-hidden ${
+              !isIgnited
+                ? 'border-neutral-800'
+                : afrState === 'rich'
+                ? 'border-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.25)]'
+                : afrState === 'lean'
+                ? 'border-blue-500/80 shadow-[0_0_20px_rgba(59,130,246,0.25)]'
+                : 'border-emerald-500/40'
+            }`}>
+              <div className="flex items-center justify-between text-xs font-mono text-neutral-400 mb-2">
+                <span>WIDEBAND AFR</span>
+                <span className={`text-[10px] font-bold ${
+                  !isIgnited
+                    ? 'text-neutral-500'
+                    : afrState === 'rich'
+                    ? 'text-amber-400 animate-pulse'
+                    : afrState === 'lean'
+                    ? 'text-blue-400'
+                    : 'text-emerald-400'
+                }`}>
+                  {!isIgnited
+                    ? 'STANDBY'
+                    : afrState === 'rich'
+                    ? '⚡ POWER ENRICHMENT'
+                    : afrState === 'lean'
+                    ? 'OVERRUN CUT-OFF'
+                    : 'STOICH (λ=1.0)'}
+                </span>
               </div>
-              <div className="text-[11px] text-neutral-400 mt-2">Stoichiometric high-load trim</div>
+              <div className={`text-3xl font-black font-mono mb-1 flex items-baseline gap-1 ${
+                !isIgnited
+                  ? 'text-neutral-500'
+                  : afrState === 'rich'
+                  ? 'text-amber-400'
+                  : afrState === 'lean'
+                  ? 'text-blue-400'
+                  : 'text-emerald-400'
+              }`}>
+                <span>{isIgnited ? currentAfr.toFixed(1) : '--.-'}</span>
+                <span className="text-xs text-neutral-500 font-normal">: 1</span>
+              </div>
+              <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden mt-3">
+                <div
+                  className={`h-full transition-all duration-200 ${
+                    !isIgnited
+                      ? 'bg-neutral-700 w-0'
+                      : afrState === 'rich'
+                      ? 'bg-amber-400'
+                      : afrState === 'lean'
+                      ? 'bg-blue-400'
+                      : 'bg-emerald-400'
+                  }`}
+                  style={{
+                    width: isIgnited
+                      ? `${Math.min(Math.max(((20 - currentAfr) / (20 - 10)) * 100, 10), 100)}%`
+                      : '0%',
+                  }}
+                />
+              </div>
+              <div className="text-[11px] text-neutral-400 mt-3">
+                {!isIgnited
+                  ? 'Bosch LSU 4.9 sensor standby'
+                  : afrState === 'rich'
+                  ? 'WOT power enrichment for peak cylinder torque'
+                  : afrState === 'lean'
+                  ? 'Fuel overrun cutoff on deceleration'
+                  : 'Closed-loop stoichiometric lambda 1.0 trim'}
+              </div>
             </div>
 
             {/* Oil & Coolant Temp */}

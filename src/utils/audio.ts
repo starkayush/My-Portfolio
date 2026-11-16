@@ -143,9 +143,11 @@ export function playEngineStartSound(onStart?: () => void, onComplete?: () => vo
 }
 
 /**
- * Dynamic Engine Throttle Rev Sound with Turbo Spool & Blow-Off Valve
+ * Dynamic Engine Throttle Rev Sound
+ * Shares the exact same deep, throaty V12 acoustic voice as the start ignition roar,
+ * enhanced with immediate throttle bite, higher rev sweep, and deceleration settling.
  */
-export function playEngineRevSound() {
+export function playEngineRevSound(intensity: number = 1.0) {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
@@ -153,101 +155,82 @@ export function playEngineRevSound() {
     // Master Rev Gain
     const masterGain = ctx.createGain();
     masterGain.gain.setValueAtTime(0.001, now);
-    masterGain.gain.linearRampToValueAtTime(0.65, now + 0.08);
-    masterGain.gain.exponentialRampToValueAtTime(0.001, now + 1.25);
+    masterGain.gain.linearRampToValueAtTime(Math.min(0.85 * intensity, 1.0), now + 0.12);
+    masterGain.gain.exponentialRampToValueAtTime(0.001, now + 1.55);
     masterGain.connect(ctx.destination);
 
-    // Resonant Exhaust Filter
+    // Resonant Exhaust Filter (Identical acoustic profile to start sound's combustion chamber)
     const exhaustFilter = ctx.createBiquadFilter();
     exhaustFilter.type = 'lowpass';
-    exhaustFilter.frequency.setValueAtTime(320, now);
-    exhaustFilter.frequency.exponentialRampToValueAtTime(2400, now + 0.3); // Opens up with rev climb
-    exhaustFilter.frequency.exponentialRampToValueAtTime(380, now + 1.1);
-    exhaustFilter.Q.setValueAtTime(3.8, now);
+    exhaustFilter.Q.setValueAtTime(3.6, now);
+    exhaustFilter.frequency.setValueAtTime(260, now);
+    exhaustFilter.frequency.exponentialRampToValueAtTime(Math.min(1600 * intensity, 2200), now + 0.35); // Sweeps open during rev
+    exhaustFilter.frequency.exponentialRampToValueAtTime(280, now + 1.4); // Settles back down
     exhaustFilter.connect(masterGain);
 
-    // 1. Combustion Oscillators (Rev sweep: 70Hz -> 390Hz -> 80Hz)
-    const osc1 = ctx.createOscillator();
-    const osc2 = ctx.createOscillator();
-    const osc3 = ctx.createOscillator();
+    // Multi-cylinder harmonic oscillators (exact matching architecture from start sound)
+    const cyl1 = ctx.createOscillator();
+    const cyl2 = ctx.createOscillator();
+    const cyl3 = ctx.createOscillator();
 
-    osc1.type = 'sawtooth';
-    osc2.type = 'triangle';
-    osc3.type = 'sawtooth';
+    cyl1.type = 'sawtooth';
+    cyl2.type = 'triangle';
+    cyl3.type = 'sawtooth';
 
-    osc1.frequency.setValueAtTime(75, now);
-    osc1.frequency.exponentialRampToValueAtTime(395, now + 0.3);
-    osc1.frequency.exponentialRampToValueAtTime(80, now + 1.1);
+    // Frequencies: Idle baseline (70Hz) -> Enhanced rev surge (~215Hz-260Hz depending on intensity) -> Settling
+    const peakFreq1 = Math.min(220 * intensity, 275);
+    const peakFreq2 = peakFreq1 * 2;
+    const peakFreq3 = peakFreq1 * 0.5;
 
-    osc2.frequency.setValueAtTime(150, now);
-    osc2.frequency.exponentialRampToValueAtTime(790, now + 0.3);
-    osc2.frequency.exponentialRampToValueAtTime(160, now + 1.1);
+    cyl1.frequency.setValueAtTime(70, now);
+    cyl1.frequency.exponentialRampToValueAtTime(peakFreq1, now + 0.35);
+    cyl1.frequency.exponentialRampToValueAtTime(70, now + 1.4);
 
-    osc3.frequency.setValueAtTime(38, now);
-    osc3.frequency.exponentialRampToValueAtTime(198, now + 0.3);
-    osc3.frequency.exponentialRampToValueAtTime(40, now + 1.1);
+    cyl2.frequency.setValueAtTime(140, now);
+    cyl2.frequency.exponentialRampToValueAtTime(peakFreq2, now + 0.35);
+    cyl2.frequency.exponentialRampToValueAtTime(140, now + 1.4);
 
+    cyl3.frequency.setValueAtTime(35, now);
+    cyl3.frequency.exponentialRampToValueAtTime(peakFreq3, now + 0.35);
+    cyl3.frequency.exponentialRampToValueAtTime(35, now + 1.4);
+
+    // Combustion gain envelope: instant throttle punch -> sustained roar -> clean stop
     const combustionGain = ctx.createGain();
-    combustionGain.gain.setValueAtTime(0.3, now);
-    combustionGain.gain.linearRampToValueAtTime(0.85, now + 0.25);
-    combustionGain.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
+    combustionGain.gain.setValueAtTime(0.001, now);
+    combustionGain.gain.exponentialRampToValueAtTime(0.85, now + 0.15); // Fast throttle catch
+    combustionGain.gain.linearRampToValueAtTime(0.35, now + 0.85);
+    combustionGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5); // Clean stop
 
-    osc1.connect(combustionGain);
-    osc2.connect(combustionGain);
-    osc3.connect(combustionGain);
+    cyl1.connect(combustionGain);
+    cyl2.connect(combustionGain);
+    cyl3.connect(combustionGain);
     combustionGain.connect(exhaustFilter);
 
-    osc1.start(now);
-    osc2.start(now);
-    osc3.start(now);
-    osc1.stop(now + 1.25);
-    osc2.stop(now + 1.25);
-    osc3.stop(now + 1.25);
+    cyl1.start(now);
+    cyl2.start(now);
+    cyl3.start(now);
 
-    // 2. Twin-Turbocharger Spool Whistle
+    cyl1.stop(now + 1.55);
+    cyl2.stop(now + 1.55);
+    cyl3.stop(now + 1.55);
+
+    // Subtle turbocharger aerodynamic spool whistle in sync with rev
     const turboOsc = ctx.createOscillator();
     turboOsc.type = 'sine';
-    turboOsc.frequency.setValueAtTime(1900, now + 0.05);
-    turboOsc.frequency.exponentialRampToValueAtTime(4800, now + 0.35);
-    turboOsc.frequency.exponentialRampToValueAtTime(1100, now + 0.85);
+    turboOsc.frequency.setValueAtTime(1600, now + 0.05);
+    turboOsc.frequency.exponentialRampToValueAtTime(3800 * intensity, now + 0.35);
+    turboOsc.frequency.exponentialRampToValueAtTime(1200, now + 0.9);
 
     const turboGain = ctx.createGain();
     turboGain.gain.setValueAtTime(0.001, now);
-    turboGain.gain.linearRampToValueAtTime(0.2, now + 0.25);
-    turboGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+    turboGain.gain.linearRampToValueAtTime(0.12 * intensity, now + 0.25);
+    turboGain.gain.exponentialRampToValueAtTime(0.001, now + 0.95);
 
     turboOsc.connect(turboGain);
     turboGain.connect(masterGain);
 
     turboOsc.start(now + 0.05);
-    turboOsc.stop(now + 0.9);
-
-    // 3. Blow-off Valve / Wastegate Hiss on throttle lift (around 0.35s)
-    const blowOffBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.35, ctx.sampleRate);
-    const blowOffData = blowOffBuffer.getChannelData(0);
-    for (let i = 0; i < blowOffBuffer.length; i++) {
-      blowOffData[i] = Math.random() * 2 - 1;
-    }
-    const blowOffSource = ctx.createBufferSource();
-    blowOffSource.buffer = blowOffBuffer;
-
-    const blowOffFilter = ctx.createBiquadFilter();
-    blowOffFilter.type = 'bandpass';
-    blowOffFilter.frequency.setValueAtTime(3400, now + 0.35);
-    blowOffFilter.Q.setValueAtTime(2.5, now + 0.35);
-
-    const blowOffGain = ctx.createGain();
-    blowOffGain.gain.setValueAtTime(0.001, now);
-    blowOffGain.gain.setValueAtTime(0.001, now + 0.34);
-    blowOffGain.gain.linearRampToValueAtTime(0.3, now + 0.38);
-    blowOffGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
-
-    blowOffSource.connect(blowOffFilter);
-    blowOffFilter.connect(blowOffGain);
-    blowOffGain.connect(masterGain);
-
-    blowOffSource.start(now + 0.35);
-    blowOffSource.stop(now + 0.8);
+    turboOsc.stop(now + 1.0);
 
   } catch (err) {
     console.warn('Web Audio Rev error:', err);
