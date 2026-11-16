@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    cursor: default;
+  }
+
+  /* Custom selection color */
+  ::selection {
+    background-color: #38bdf8;
+    color: #030305;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    background-color: #050508;
+    color: #f3f4f6;
+  }
+
+  body {
+    overflow-x: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #050508;
+}
+::-webkit-scrollbar-thumb {
+  background: #1f2430;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #38bdf8;
+}
+
+/* Carbon fiber patterned background */
+.bg-carbon-pattern {
+  background-color: #090a0f;
+  background-image: 
+    radial-gradient(#151824 1px, transparent 1px),
+    radial-gradient(#151824 1px, #07080c 1px);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+}
+
+/* Brushed metal gradient */
+.brushed-metal {
+  background: linear-gradient(135deg, #1b1e28 0%, #0d0f15 50%, #171a24 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.luxury-glow {
+  box-shadow: 0 0 35px -5px rgba(56, 189, 248, 0.15);
+}
+
+.engine-glow {
+  box-shadow: 0 0 45px -5px rgba(239, 68, 68, 0.35);
+}
+
+.piano-glow {
+  box-shadow: 0 0 45px -5px rgba(168, 85, 247, 0.25);
+}
