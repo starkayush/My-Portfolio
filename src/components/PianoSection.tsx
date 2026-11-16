@@ -221,9 +221,11 @@ export const PianoSection: React.FC = () => {
               {/* Accidental Black Keys (Positioned absolutely over white keys) */}
               <div className="absolute top-3 sm:top-4 left-3 sm:left-4 right-3 sm:right-4 h-32 sm:h-40 pointer-events-none flex">
                 {whiteKeys.map((wKey, index) => {
-                  // Find if there's a black key right after this white key
-                  const blackKey = blackKeys.find((b) => b.note.startsWith(wKey.note[0]));
-                  if (!blackKey || wKey.note.startsWith('E') || wKey.note.startsWith('B')) {
+                  // Find matching sharp note for this specific white key and octave (e.g. C4 -> C#4, D4 -> D#4, C5 -> C#5, D5 -> D#5)
+                  const sharpNoteName = wKey.note.slice(0, 1) + '#' + wKey.note.slice(1);
+                  const blackKey = blackKeys.find((b) => b.note === sharpNoteName);
+
+                  if (!blackKey) {
                     return <div key={`spacer-${index}`} className="w-10 sm:w-14 mr-1.5 sm:mr-2 flex-shrink-0" />;
                   }
 

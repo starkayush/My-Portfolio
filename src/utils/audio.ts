@@ -324,4 +324,6 @@ export const PIANO_NOTES = [
   { note: 'C5', key: 'K', freq: 523.25, isBlack: false, label: 'Do' },
   { note: 'C#5', key: 'O', freq: 554.37, isBlack: true, label: 'C#' },
   { note: 'D5', key: 'L', freq: 587.33, isBlack: false, label: 'Re' },
+  { note: 'D#5', key: 'P', freq: 622.25, isBlack: true, label: 'D#' },
+  { note: 'E5', key: ';', freq: 659.25, isBlack: false, label: 'Mi' },
 ];
