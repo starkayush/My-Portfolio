@@ -452,11 +452,6 @@ export const ContactSection: React.FC = () => {
               </button>
             </div>
           </div>
-
-          <div className="text-center md:text-right flex flex-col items-center md:items-end gap-1 text-[11px] text-neutral-500">
-            <div>Crafted with Rolls-Royce Black Badge aesthetic • Engine & Acoustic Harmony</div>
-            <div className="text-neutral-600">All Device Compatible • Touch & Desktop Precision</div>
-          </div>
         </footer>
       </div>
     </section>

@@ -18,10 +18,23 @@ export const PianoSection: React.FC = () => {
     }, 280);
   };
 
-  // Keyboard shortcut listener
+  // Keyboard shortcut listener (ignores typing in forms/inputs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
+
+      // Ignore if user is currently typing in an input, textarea, or editable element
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('form, input, textarea'))
+      ) {
+        return;
+      }
+
       const keyChar = e.key.toUpperCase();
       const match = PIANO_NOTES.find((n) => n.key === keyChar);
       if (match) {
