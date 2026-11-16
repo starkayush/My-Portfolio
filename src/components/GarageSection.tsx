@@ -11,14 +11,25 @@ import {
   ArrowUpRight,
   Radio
 } from 'lucide-react';
-import { playEngineStartSound } from '../utils/audio';
+import { playEngineStartSound, playEngineRevSound } from '../utils/audio';
 
 export const GarageSection: React.FC = () => {
   const [isIgnited, setIsIgnited] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isRevving, setIsRevving] = useState(false);
   const [currentRpm, setCurrentRpm] = useState(850);
   const [activeTuningTab, setActiveTuningTab] = useState<'ecu' | 'components' | 'driving'>('ecu');
   const [ecuStage, setEcuStage] = useState<'stage1' | 'stage2' | 'track'>('stage2');
+
+  const getBaseBoost = (stage: 'stage1' | 'stage2' | 'track') => {
+    return stage === 'stage1' ? 0.3 : stage === 'stage2' ? 0.4 : 0.5;
+  };
+
+  const getPeakBoost = (stage: 'stage1' | 'stage2' | 'track') => {
+    return stage === 'stage1' ? 1.6 : stage === 'stage2' ? 2.2 : 2.9;
+  };
+
+  const [currentBoost, setCurrentBoost] = useState(0.4);
 
   const handleToggleEngine = () => {
     if (isStarting) return;
@@ -35,21 +46,38 @@ export const GarageSection: React.FC = () => {
           setIsStarting(false);
           setIsIgnited(true);
           setCurrentRpm(1100);
+          setCurrentBoost(getBaseBoost(ecuStage));
         }
       );
     } else {
       // Turn off
       setIsIgnited(false);
       setCurrentRpm(0);
+      setCurrentBoost(0.0);
+    }
+  };
+
+  const handleSelectStage = (stage: 'stage1' | 'stage2' | 'track') => {
+    setEcuStage(stage);
+    if (isIgnited && !isRevving) {
+      setCurrentBoost(getBaseBoost(stage));
     }
   };
 
   const handleQuickRev = () => {
-    if (!isIgnited) return;
-    setCurrentRpm(6800);
+    if (!isIgnited || isRevving) return;
+    setIsRevving(true);
+    playEngineRevSound();
+
+    const peak = getPeakBoost(ecuStage);
+    setCurrentRpm(7450);
+    setCurrentBoost(peak);
+
     setTimeout(() => {
       setCurrentRpm(1100);
-    }, 700);
+      setCurrentBoost(getBaseBoost(ecuStage));
+      setIsRevving(false);
+    }, 950);
   };
 
   return (
@@ -64,15 +92,14 @@ export const GarageSection: React.FC = () => {
           <div>
             <div className="inline-flex items-center gap-2 text-xs font-mono tracking-widest text-red-500 uppercase mb-3">
               <Flame className="w-3.5 h-3.5" />
-              Automotive Engineering & Passion
+              Automotive Engineering & Curiosity
             </div>
             <h2 className="text-3xl sm:text-5xl font-black text-white uppercase font-['Cinzel',serif] tracking-wider">
               The Dyno Lab & Garage
             </h2>
           </div>
           <p className="text-sm text-neutral-400 max-w-md">
-            Car segment fanatic, ECU remapping enthusiast, and automotive component tuner.
-            Fascinated by mechanical precision, apex dynamics, and internal combustion engines.
+            Car segment fanatic, ECU remapping and  automotive component tuning enthusiast . Fascinated by mechanical precision, apex dynamics, and internal combustion engines.
           </p>
         </div>
 
@@ -165,38 +192,64 @@ export const GarageSection: React.FC = () => {
           {/* Live Dyno Gauges Strip */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
             {/* RPM Meter */}
-            <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800 relative overflow-hidden">
+            <div className={`p-5 rounded-2xl bg-neutral-900/60 border transition-all duration-300 relative overflow-hidden ${
+              isRevving ? 'border-red-500/80 shadow-[0_0_25px_rgba(239,68,68,0.3)]' : 'border-neutral-800'
+            }`}>
               <div className="flex items-center justify-between text-xs font-mono text-neutral-400 mb-2">
                 <span>TACHOMETER</span>
-                <span className="text-red-400">REDLINE 8500</span>
+                <span className={isRevving ? 'text-red-400 font-bold animate-pulse' : 'text-red-400'}>
+                  {isRevving ? '🔥 SURGING TO REDLINE' : 'REDLINE 8500'}
+                </span>
               </div>
               <div className="text-3xl font-black font-mono text-white mb-1">
                 {currentRpm.toLocaleString()} <span className="text-xs text-neutral-500 font-normal">RPM</span>
               </div>
               <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden mt-3">
                 <div
-                  className="bg-gradient-to-r from-emerald-400 via-amber-400 to-red-500 h-full transition-all duration-300"
+                  className="bg-gradient-to-r from-emerald-400 via-amber-400 to-red-500 h-full transition-all duration-200"
                   style={{ width: `${Math.min((currentRpm / 8500) * 100, 100)}%` }}
                 />
               </div>
               {isIgnited && (
                 <button
                   onClick={handleQuickRev}
-                  className="mt-3 text-[10px] font-mono tracking-wider uppercase text-cyan-400 hover:text-cyan-300 underline"
+                  disabled={isRevving}
+                  data-cursor="engine"
+                  className={`mt-3 w-full py-2 px-3 rounded-xl border text-xs font-mono tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2 ${
+                    isRevving
+                      ? 'bg-red-950/80 border-red-500 text-red-200 shadow-[0_0_15px_rgba(239,68,68,0.5)] scale-[0.98]'
+                      : 'bg-neutral-800/80 hover:bg-neutral-700/80 border-neutral-700 text-cyan-400 hover:text-cyan-300 hover:border-cyan-400 shadow-sm'
+                  }`}
                 >
-                  [ Tap to Rev Engine ]
+                  <Flame className={`w-3.5 h-3.5 ${isRevving ? 'text-red-400 animate-bounce' : 'text-cyan-400'}`} />
+                  <span>{isRevving ? 'Engine Revving...' : 'Tap to Rev Engine'}</span>
                 </button>
               )}
             </div>
 
             {/* Boost Pressure */}
-            <div className="p-5 rounded-2xl bg-neutral-900/60 border border-neutral-800">
-              <div className="text-xs font-mono text-neutral-400 mb-2">TURBO BOOST</div>
-              <div className="text-3xl font-black font-mono text-cyan-400 mb-1">
-                {ecuStage === 'stage1' ? '1.4' : ecuStage === 'stage2' ? '1.9' : '2.4'}{' '}
+            <div className={`p-5 rounded-2xl bg-neutral-900/60 border transition-all duration-300 relative overflow-hidden ${
+              isRevving ? 'border-cyan-400/80 shadow-[0_0_25px_rgba(34,211,238,0.25)]' : 'border-neutral-800'
+            }`}>
+              <div className="flex items-center justify-between text-xs font-mono text-neutral-400 mb-2">
+                <span>TURBO BOOST</span>
+                <span className={isRevving ? 'text-cyan-400 font-bold animate-pulse text-[10px]' : 'text-neutral-500 text-[10px]'}>
+                  {isRevving ? '⚡ SPOOLING / PEAK' : 'TWIN-SCROLL'}
+                </span>
+              </div>
+              <div className="text-3xl font-black font-mono text-cyan-400 mb-1 flex items-baseline gap-1">
+                <span>{isIgnited ? currentBoost.toFixed(1) : '0.0'}</span>
                 <span className="text-xs text-neutral-500 font-normal">BAR</span>
               </div>
-              <div className="text-[11px] text-neutral-400 mt-2">Twin-scroll twin-turbo spool</div>
+              <div className="w-full bg-neutral-800 h-2 rounded-full overflow-hidden mt-3">
+                <div
+                  className="bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 h-full transition-all duration-200"
+                  style={{ width: `${Math.min((currentBoost / 3.0) * 100, 100)}%` }}
+                />
+              </div>
+              <div className="text-[11px] text-neutral-400 mt-3">
+                {isRevving ? 'Overboost spooling under throttle load' : 'Twin-scroll twin-turbo spool'}
+              </div>
             </div>
 
             {/* Air-Fuel Ratio (AFR) */}
@@ -268,7 +321,7 @@ export const GarageSection: React.FC = () => {
                   ].map((map) => (
                     <button
                       key={map.id}
-                      onClick={() => setEcuStage(map.id as any)}
+                      onClick={() => handleSelectStage(map.id as any)}
                       className={`w-full p-4 rounded-xl text-left border transition-all ${
                         ecuStage === map.id
                           ? 'border-red-500 bg-red-950/30 shadow-lg'

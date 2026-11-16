@@ -143,6 +143,118 @@ export function playEngineStartSound(onStart?: () => void, onComplete?: () => vo
 }
 
 /**
+ * Dynamic Engine Throttle Rev Sound with Turbo Spool & Blow-Off Valve
+ */
+export function playEngineRevSound() {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+
+    // Master Rev Gain
+    const masterGain = ctx.createGain();
+    masterGain.gain.setValueAtTime(0.001, now);
+    masterGain.gain.linearRampToValueAtTime(0.65, now + 0.08);
+    masterGain.gain.exponentialRampToValueAtTime(0.001, now + 1.25);
+    masterGain.connect(ctx.destination);
+
+    // Resonant Exhaust Filter
+    const exhaustFilter = ctx.createBiquadFilter();
+    exhaustFilter.type = 'lowpass';
+    exhaustFilter.frequency.setValueAtTime(320, now);
+    exhaustFilter.frequency.exponentialRampToValueAtTime(2400, now + 0.3); // Opens up with rev climb
+    exhaustFilter.frequency.exponentialRampToValueAtTime(380, now + 1.1);
+    exhaustFilter.Q.setValueAtTime(3.8, now);
+    exhaustFilter.connect(masterGain);
+
+    // 1. Combustion Oscillators (Rev sweep: 70Hz -> 390Hz -> 80Hz)
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const osc3 = ctx.createOscillator();
+
+    osc1.type = 'sawtooth';
+    osc2.type = 'triangle';
+    osc3.type = 'sawtooth';
+
+    osc1.frequency.setValueAtTime(75, now);
+    osc1.frequency.exponentialRampToValueAtTime(395, now + 0.3);
+    osc1.frequency.exponentialRampToValueAtTime(80, now + 1.1);
+
+    osc2.frequency.setValueAtTime(150, now);
+    osc2.frequency.exponentialRampToValueAtTime(790, now + 0.3);
+    osc2.frequency.exponentialRampToValueAtTime(160, now + 1.1);
+
+    osc3.frequency.setValueAtTime(38, now);
+    osc3.frequency.exponentialRampToValueAtTime(198, now + 0.3);
+    osc3.frequency.exponentialRampToValueAtTime(40, now + 1.1);
+
+    const combustionGain = ctx.createGain();
+    combustionGain.gain.setValueAtTime(0.3, now);
+    combustionGain.gain.linearRampToValueAtTime(0.85, now + 0.25);
+    combustionGain.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
+
+    osc1.connect(combustionGain);
+    osc2.connect(combustionGain);
+    osc3.connect(combustionGain);
+    combustionGain.connect(exhaustFilter);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc3.start(now);
+    osc1.stop(now + 1.25);
+    osc2.stop(now + 1.25);
+    osc3.stop(now + 1.25);
+
+    // 2. Twin-Turbocharger Spool Whistle
+    const turboOsc = ctx.createOscillator();
+    turboOsc.type = 'sine';
+    turboOsc.frequency.setValueAtTime(1900, now + 0.05);
+    turboOsc.frequency.exponentialRampToValueAtTime(4800, now + 0.35);
+    turboOsc.frequency.exponentialRampToValueAtTime(1100, now + 0.85);
+
+    const turboGain = ctx.createGain();
+    turboGain.gain.setValueAtTime(0.001, now);
+    turboGain.gain.linearRampToValueAtTime(0.2, now + 0.25);
+    turboGain.gain.exponentialRampToValueAtTime(0.001, now + 0.85);
+
+    turboOsc.connect(turboGain);
+    turboGain.connect(masterGain);
+
+    turboOsc.start(now + 0.05);
+    turboOsc.stop(now + 0.9);
+
+    // 3. Blow-off Valve / Wastegate Hiss on throttle lift (around 0.35s)
+    const blowOffBuffer = ctx.createBuffer(1, ctx.sampleRate * 0.35, ctx.sampleRate);
+    const blowOffData = blowOffBuffer.getChannelData(0);
+    for (let i = 0; i < blowOffBuffer.length; i++) {
+      blowOffData[i] = Math.random() * 2 - 1;
+    }
+    const blowOffSource = ctx.createBufferSource();
+    blowOffSource.buffer = blowOffBuffer;
+
+    const blowOffFilter = ctx.createBiquadFilter();
+    blowOffFilter.type = 'bandpass';
+    blowOffFilter.frequency.setValueAtTime(3400, now + 0.35);
+    blowOffFilter.Q.setValueAtTime(2.5, now + 0.35);
+
+    const blowOffGain = ctx.createGain();
+    blowOffGain.gain.setValueAtTime(0.001, now);
+    blowOffGain.gain.setValueAtTime(0.001, now + 0.34);
+    blowOffGain.gain.linearRampToValueAtTime(0.3, now + 0.38);
+    blowOffGain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+
+    blowOffSource.connect(blowOffFilter);
+    blowOffFilter.connect(blowOffGain);
+    blowOffGain.connect(masterGain);
+
+    blowOffSource.start(now + 0.35);
+    blowOffSource.stop(now + 0.8);
+
+  } catch (err) {
+    console.warn('Web Audio Rev error:', err);
+  }
+}
+
+/**
  * Rich Polyphonic Grand Piano Synthesizer
  */
 export function playPianoKey(freq: number, duration: number = 2.0) {
