@@ -3,48 +3,98 @@ import { Music, Volume2, Sparkles, Disc, Radio } from 'lucide-react';
 import { PIANO_NOTES, playPianoKey } from '../utils/audio';
 
 export const PianoSection: React.FC = () => {
-  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeKeys, setActiveKeys] = useState<string[]>([]);
   const [lastPlayedNote, setLastPlayedNote] = useState<string>('C4 (Do)');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Play piano key handler
-  const handlePlayNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
-    setActiveKey(noteObj.note);
+  const addActiveKey = (noteObj: (typeof PIANO_NOTES)[0]) => {
+    setActiveKeys((prev) => {
+      if (!prev.includes(noteObj.note)) {
+        return [...prev, noteObj.note];
+      }
+      return prev;
+    });
     setLastPlayedNote(`${noteObj.note} - ${noteObj.label}`);
     playPianoKey(noteObj.freq, 2.2);
-
-    setTimeout(() => {
-      setActiveKey((prev) => (prev === noteObj.note ? null : prev));
-    }, 280);
   };
+
+  const removeActiveKey = (noteObj: (typeof PIANO_NOTES)[0]) => {
+    setActiveKeys((prev) => prev.filter((n) => n !== noteObj.note));
+  };
+
 
   // Keyboard shortcut listener (ignores typing in forms/inputs)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
 
-      // Ignore if user is currently typing in an input, textarea, or editable element
-      const target = e.target as HTMLElement | null;
+      // Ignore only if user is actively focused and typing inside a text input or textarea
+      const activeEl = document.activeElement as HTMLElement | null;
       if (
-        target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable ||
-          target.closest('form, input, textarea'))
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.isContentEditable)
       ) {
         return;
       }
 
-      const keyChar = e.key.toUpperCase();
-      const match = PIANO_NOTES.find((n) => n.key === keyChar);
+      const keyStr = e.key.toLowerCase();
+      const codeStr = e.code;
+
+      const match = PIANO_NOTES.find((n) => {
+        const noteKey = n.key.toLowerCase();
+
+        // Direct character match (case-insensitive)
+        if (noteKey === keyStr) return true;
+        if (n.key.toUpperCase() === e.key.toUpperCase()) return true;
+
+        // Code match (e.g. 'KeyA' for note A, 'KeyP' for note P)
+        if (codeStr === `Key${n.key.toUpperCase()}`) return true;
+
+        // Dedicated matching for rightmost D#5 (P key & KeyP code)
+        if (n.note === 'D#5' && (keyStr === 'p' || codeStr === 'KeyP')) return true;
+
+        // Dedicated matching for rightmost E5 (; key, : key & Semicolon code)
+        if (n.note === 'E5' && (keyStr === ';' || keyStr === ':' || codeStr === 'Semicolon')) return true;
+
+        return false;
+      });
+
       if (match) {
-        handlePlayNote(match);
+        e.preventDefault();
+        addActiveKey(match);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const keyStr = e.key.toLowerCase();
+      const codeStr = e.code;
+
+      const match = PIANO_NOTES.find((n) => {
+        const noteKey = n.key.toLowerCase();
+        if (noteKey === keyStr) return true;
+        if (n.key.toUpperCase() === e.key.toUpperCase()) return true;
+        if (codeStr === `Key${n.key.toUpperCase()}`) return true;
+        if (n.note === 'D#5' && (keyStr === 'p' || codeStr === 'KeyP')) return true;
+        if (n.note === 'E5' && (keyStr === ';' || keyStr === ':' || codeStr === 'Semicolon')) return true;
+        return false;
+      });
+
+      if (match) {
+        removeActiveKey(match);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
+
 
   // Gliding Musical Waveforms & Particle Canvas in Background
   useEffect(() => {
@@ -195,11 +245,13 @@ export const PianoSection: React.FC = () => {
               {/* Natural White Keys */}
               <div className="flex gap-1.5 sm:gap-2">
                 {whiteKeys.map((key) => {
-                  const isCurrent = activeKey === key.note;
+                  const isCurrent = activeKeys.includes(key.note);
                   return (
                     <button
                       key={key.note}
-                      onClick={() => handlePlayNote(key)}
+                      onMouseDown={() => addActiveKey(key)}
+                      onMouseUp={() => removeActiveKey(key)}
+                      onMouseLeave={() => removeActiveKey(key)}
                       data-cursor="piano"
                       className={`relative w-10 sm:w-14 h-48 sm:h-64 rounded-b-lg flex flex-col justify-end items-center pb-4 transition-all duration-150 transform ${
                         isCurrent
@@ -229,14 +281,16 @@ export const PianoSection: React.FC = () => {
                     return <div key={`spacer-${index}`} className="w-10 sm:w-14 mr-1.5 sm:mr-2 flex-shrink-0" />;
                   }
 
-                  const isCurrent = activeKey === blackKey.note;
+                  const isCurrent = activeKeys.includes(blackKey.note);
                   return (
                     <div key={blackKey.note} className="w-10 sm:w-14 mr-1.5 sm:mr-2 relative flex-shrink-0">
                       <button
-                        onClick={(e) => {
+                        onMouseDown={(e) => {
                           e.stopPropagation();
-                          handlePlayNote(blackKey);
+                          addActiveKey(blackKey);
                         }}
+                        onMouseUp={() => removeActiveKey(blackKey)}
+                        onMouseLeave={() => removeActiveKey(blackKey)}
                         data-cursor="piano"
                         className={`pointer-events-auto absolute -right-3.5 sm:-right-4 w-7 sm:w-8 h-32 sm:h-40 rounded-b-md z-20 flex flex-col justify-end items-center pb-3 transition-all duration-150 border border-neutral-700 ${
                           isCurrent
