@@ -251,142 +251,112 @@ export function playEngineRevSound(intensity: number = 1.0) {
   }
 }
 
+let pianoWave: PeriodicWave | null = null;
+
+function getPianoPeriodicWave(ctx: AudioContext): PeriodicWave {
+  if (!pianoWave) {
+    // Grand Piano Fourier Series Harmonics
+    // Acoustic overtone distribution modeled after a Steinway Concert Grand
+    const real = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const imag = new Float32Array([
+      0,      // DC
+      1.00,   // Fundamental (warm, full)
+      0.38,   // 2nd (octave)
+      0.15,   // 3rd (octave + 5th)
+      0.07,   // 4th (2 octaves)
+      0.03,   // 5th (2 octaves + 3rd)
+      0.015,  // 6th (2 octaves + 5th)
+      0.008,  // 7th
+      0.004,  // 8th
+      0.002   // 9th
+    ]);
+    pianoWave = ctx.createPeriodicWave(real, imag, { disableNormalization: false });
+  }
+  return pianoWave;
+}
+
 /**
- * Concert Grand Piano Synthesizer with Physical String Acoustics:
- * - Percussive felt-hammer strike transient (12ms mechanical impact knock)
- * - Triple-string unison detuning (crystalline acoustic depth & singing chorusing)
- * - Inharmonic string partials with rapid high-frequency energy dissipation (eliminates reed/harmonium buzz)
- * - Dynamic timbre envelope (hammer strike opens bright, swiftly mellows into warm resonant tone)
- * - Soundboard spruce wood acoustic resonance chamber
- * - Smooth felt-damper key release
+ * Authentic Acoustic Grand Piano Synthesizer:
+ * - Steinway harmonic series via Anti-Aliased PeriodicWave (eliminates harmonium/reed buzz)
+ * - Deep wooden soundboard acoustic body
+ * - Dynamic velocity lowpass damping (crisp hammer impact settling into warm singing sustain)
+ * - Natural acoustic damper key release
  */
-export function playPianoKey(freq: number, duration: number = 2.8): () => void {
+export function playPianoKey(freq: number, duration: number = 3.0): () => void {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
     const compressor = getPianoCompressor(ctx);
 
-    // Master Piano Voice Gain
+    // Master Voice Gain
     const voiceGain = ctx.createGain();
     voiceGain.gain.setValueAtTime(0.85, now);
 
-    // 1. SOUNDBOARD RESONANCE FILTER (Simulates spruce wooden soundboard body ~340Hz)
-    const soundboardFilter = ctx.createBiquadFilter();
-    soundboardFilter.type = 'peaking';
-    soundboardFilter.frequency.setValueAtTime(340, now);
-    soundboardFilter.Q.setValueAtTime(1.3, now);
-    soundboardFilter.gain.setValueAtTime(3.5, now);
+    // Dynamic Lowpass Filter (Acoustic string brightness: bright attack -> warm singing decay)
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.Q.setValueAtTime(0.9, now);
+    const startCutoff = Math.min(freq * 5 + 1800, 7500);
+    const endCutoff = Math.min(freq * 2.0 + 700, 2400);
+    lowpass.frequency.setValueAtTime(startCutoff, now);
+    lowpass.frequency.exponentialRampToValueAtTime(endCutoff, now + 0.25);
 
-    // 2. DYNAMIC TIMBRAL LOWPASS FILTER (Bright attack -> warm woody body decay)
-    const timberFilter = ctx.createBiquadFilter();
-    timberFilter.type = 'lowpass';
-    timberFilter.Q.setValueAtTime(1.1, now);
-    const initialCutoff = Math.min(freq * 7.5, 7500);
-    const settledCutoff = Math.min(freq * 2.2, 1800);
-    timberFilter.frequency.setValueAtTime(initialCutoff, now);
-    timberFilter.frequency.exponentialRampToValueAtTime(settledCutoff, now + 0.18);
+    voiceGain.connect(lowpass);
+    lowpass.connect(compressor);
 
-    voiceGain.connect(soundboardFilter);
-    soundboardFilter.connect(timberFilter);
-    timberFilter.connect(compressor);
+    // 1. Primary Piano String (Harmonic PeriodicWave)
+    const stringOsc = ctx.createOscillator();
+    stringOsc.setPeriodicWave(getPianoPeriodicWave(ctx));
+    stringOsc.frequency.setValueAtTime(freq, now);
 
-    const activeNodes: (AudioNode & { stop?: (when?: number) => void })[] = [];
+    const stringGain = ctx.createGain();
+    stringGain.gain.setValueAtTime(0.0001, now);
+    stringGain.gain.linearRampToValueAtTime(0.68, now + 0.003); // 3ms crisp hammer attack
+    stringGain.gain.exponentialRampToValueAtTime(0.50, now + 0.06); // natural hammer rebound
+    stringGain.gain.exponentialRampToValueAtTime(0.0001, now + duration); // singing sustain
 
-    // 3. MECHANICAL HAMMER STRIKE TRANSIENT (Felt & Wood Thud - 12ms impulse)
-    // Hammer click oscillator (rapid pitch drop: 280Hz -> 45Hz)
-    const hammerOsc = ctx.createOscillator();
-    hammerOsc.type = 'sine';
-    hammerOsc.frequency.setValueAtTime(Math.min(freq * 1.5, 320), now);
-    hammerOsc.frequency.exponentialRampToValueAtTime(45, now + 0.015);
+    stringOsc.connect(stringGain);
+    stringGain.connect(voiceGain);
+    stringOsc.start(now);
+    stringOsc.stop(now + duration);
+
+    // 2. Piano Soundboard Fundamental Body (Warm, deep wooden acoustic tone)
+    const bodyOsc = ctx.createOscillator();
+    bodyOsc.type = 'sine';
+    bodyOsc.frequency.setValueAtTime(freq, now);
+
+    const bodyGain = ctx.createGain();
+    bodyGain.gain.setValueAtTime(0.0001, now);
+    bodyGain.gain.linearRampToValueAtTime(0.24, now + 0.004);
+    bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    bodyOsc.connect(bodyGain);
+    bodyGain.connect(voiceGain);
+    bodyOsc.start(now);
+    bodyOsc.stop(now + duration);
+
+    // 3. Subtle Felt Hammer Mechanical Strike (Soft 5ms high-frequency felt touch)
+    const hammerBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.006), ctx.sampleRate);
+    const hammerData = hammerBuffer.getChannelData(0);
+    for (let i = 0; i < hammerData.length; i++) {
+      hammerData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.0015));
+    }
+    const hammerSource = ctx.createBufferSource();
+    hammerSource.buffer = hammerBuffer;
+
+    const hammerFilter = ctx.createBiquadFilter();
+    hammerFilter.type = 'bandpass';
+    hammerFilter.frequency.setValueAtTime(Math.min(freq * 3, 3000), now);
+    hammerFilter.Q.setValueAtTime(2.0, now);
 
     const hammerGain = ctx.createGain();
-    hammerGain.gain.setValueAtTime(0.24, now);
-    hammerGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.016);
+    hammerGain.gain.setValueAtTime(0.05, now);
 
-    hammerOsc.connect(hammerGain);
-    hammerGain.connect(voiceGain);
-    hammerOsc.start(now);
-    hammerOsc.stop(now + 0.02);
-    activeNodes.push(hammerOsc);
+    hammerSource.connect(hammerFilter);
+    hammerFilter.connect(voiceGain);
+    hammerSource.start(now);
 
-    // 4. TRIPLE UNISON STRINGS (Natural Chorus & Acoustic Breadth)
-    // String A: Center pitch
-    const str1 = ctx.createOscillator();
-    str1.type = 'sine';
-    str1.frequency.setValueAtTime(freq, now);
-
-    const str1Gain = ctx.createGain();
-    str1Gain.gain.setValueAtTime(0.001, now);
-    str1Gain.gain.linearRampToValueAtTime(0.38, now + 0.005);
-    str1Gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
-    str1.connect(str1Gain);
-    str1Gain.connect(voiceGain);
-    str1.start(now);
-    str1.stop(now + duration);
-    activeNodes.push(str1);
-
-    // String B: Subtle sharp unison (+1.2 cents)
-    const str2 = ctx.createOscillator();
-    str2.type = 'sine';
-    str2.frequency.setValueAtTime(freq * 1.0007, now);
-
-    const str2Gain = ctx.createGain();
-    str2Gain.gain.setValueAtTime(0.001, now);
-    str2Gain.gain.linearRampToValueAtTime(0.20, now + 0.005);
-    str2Gain.gain.exponentialRampToValueAtTime(0.0001, now + duration * 0.95);
-    str2.connect(str2Gain);
-    str2Gain.connect(voiceGain);
-    str2.start(now);
-    str2.stop(now + duration);
-    activeNodes.push(str2);
-
-    // String C: Subtle flat unison (-1.2 cents)
-    const str3 = ctx.createOscillator();
-    str3.type = 'sine';
-    str3.frequency.setValueAtTime(freq * 0.9993, now);
-
-    const str3Gain = ctx.createGain();
-    str3Gain.gain.setValueAtTime(0.001, now);
-    str3Gain.gain.linearRampToValueAtTime(0.20, now + 0.005);
-    str3Gain.gain.exponentialRampToValueAtTime(0.0001, now + duration * 0.95);
-    str3.connect(str3Gain);
-    str3Gain.connect(voiceGain);
-    str3.start(now);
-    str3.stop(now + duration);
-    activeNodes.push(str3);
-
-    // 5. INHARMONIC OVERTONES (Fast-decaying crystalline string partials)
-    // 2nd Harmonic (slight inharmonicity factor: x2.002)
-    const harm2 = ctx.createOscillator();
-    harm2.type = 'sine';
-    harm2.frequency.setValueAtTime(freq * 2.002, now);
-
-    const harm2Gain = ctx.createGain();
-    harm2Gain.gain.setValueAtTime(0.001, now);
-    harm2Gain.gain.linearRampToValueAtTime(0.14, now + 0.004);
-    harm2Gain.gain.exponentialRampToValueAtTime(0.0001, now + Math.min(duration * 0.55, 1.2));
-    harm2.connect(harm2Gain);
-    harm2Gain.connect(voiceGain);
-    harm2.start(now);
-    harm2.stop(now + duration);
-    activeNodes.push(harm2);
-
-    // 3rd Harmonic (fast decay: dies in ~0.35s)
-    const harm3 = ctx.createOscillator();
-    harm3.type = 'sine';
-    harm3.frequency.setValueAtTime(freq * 3.006, now);
-
-    const harm3Gain = ctx.createGain();
-    harm3Gain.gain.setValueAtTime(0.001, now);
-    harm3Gain.gain.linearRampToValueAtTime(0.06, now + 0.003);
-    harm3Gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
-    harm3.connect(harm3Gain);
-    harm3Gain.connect(voiceGain);
-    harm3.start(now);
-    harm3.stop(now + 0.4);
-    activeNodes.push(harm3);
-
-    // 6. FELT DAMPER RELEASE (When user lifts key or mouse)
+    // 4. Acoustic Damper Release (smoothly arrests the vibrating strings on key release)
     let isReleased = false;
     return () => {
       if (isReleased) return;
@@ -395,16 +365,15 @@ export function playPianoKey(freq: number, duration: number = 2.8): () => void {
         const releaseNow = ctx.currentTime;
         voiceGain.gain.cancelScheduledValues(releaseNow);
         voiceGain.gain.setValueAtTime(voiceGain.gain.value, releaseNow);
-        // Smooth acoustic damper dampens the vibrating strings over 140ms
-        voiceGain.gain.exponentialRampToValueAtTime(0.0001, releaseNow + 0.14);
+        voiceGain.gain.exponentialRampToValueAtTime(0.0001, releaseNow + 0.12);
         setTimeout(() => {
-          activeNodes.forEach((node) => {
-            try {
-              if (node.stop) node.stop();
-              node.disconnect();
-            } catch {}
-          });
-        }, 160);
+          try {
+            stringOsc.stop();
+            bodyOsc.stop();
+            stringOsc.disconnect();
+            bodyOsc.disconnect();
+          } catch {}
+        }, 140);
       } catch {}
     };
   } catch (err) {
