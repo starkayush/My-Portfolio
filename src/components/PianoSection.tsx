@@ -55,6 +55,10 @@ export const PIANO_CHORDS = [
 ];
 
 export const PianoSection: React.FC = () => {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [isInView, setIsInView] = useState<boolean>(false);
+  const isInViewRef = useRef<boolean>(false);
+
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
   const [hudStatus, setHudStatus] = useState<string>('C4 (Do)');
   const activeVoicesRef = useRef<Map<string, () => void>>(new Map());
@@ -64,6 +68,30 @@ export const PianoSection: React.FC = () => {
   const isPointerDownRef = useRef<boolean>(false);
   const lastGlidedNoteRef = useRef<string | null>(null);
   const glideClearTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Activate keyboard input ONLY when the user is scrolled to / viewing the Gliding Piano section
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const inView = entry.isIntersecting;
+        setIsInView(inView);
+        isInViewRef.current = inView;
+        if (!inView) {
+          // If scrolled away from the piano section, immediately stop any active piano sounds/keys
+          releaseAllNotes();
+        }
+      },
+      {
+        threshold: 0.15,
+      }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Determine current harmonic status label from active keys
   const updateHudLabel = (currentActiveKeys: string[], lastNote?: string) => {
@@ -258,6 +286,8 @@ export const PianoSection: React.FC = () => {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore all piano keyboard shortcuts when not currently on the Gliding Piano section
+      if (!isInViewRef.current) return;
       if (e.repeat) return;
       if (isTyping()) return;
 
@@ -276,6 +306,8 @@ export const PianoSection: React.FC = () => {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
+      if (!isInViewRef.current) return;
+
       const chordByNum = PIANO_CHORDS.find((c) => c.numKey === e.key);
       if (chordByNum) {
         releaseChord(chordByNum);
@@ -403,7 +435,11 @@ export const PianoSection: React.FC = () => {
   const blackKeys = PIANO_NOTES.filter((n) => n.isBlack);
 
   return (
-    <section id="music" className="py-24 px-6 relative bg-[#040407] border-t border-purple-950/40 overflow-hidden">
+    <section
+      ref={sectionRef}
+      id="music"
+      className="py-24 px-6 relative bg-[#040407] border-t border-purple-950/40 overflow-hidden"
+    >
       {/* Background Musical Waves Canvas */}
       <canvas
         ref={canvasRef}
@@ -443,8 +479,14 @@ export const PianoSection: React.FC = () => {
               <span className="text-xs font-mono text-neutral-400">
                 STATUS: <span className="text-purple-400 font-bold tracking-wide">{hudStatus}</span>
               </span>
-              <span className="hidden sm:inline-block text-[11px] font-mono text-neutral-500 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800">
-                TAP • DRAG • SCROLL TO GLIDE
+              <span
+                className={`hidden sm:inline-block text-[11px] font-mono px-2.5 py-0.5 rounded border transition-all duration-300 ${
+                  isInView
+                    ? 'text-purple-300 bg-purple-950/70 border-purple-700/80 shadow-[0_0_10px_rgba(168,85,247,0.3)]'
+                    : 'text-neutral-500 bg-neutral-900 border-neutral-800'
+                }`}
+              >
+                {isInView ? 'KEYBOARD INPUT ACTIVE' : 'SCROLL TO PLAY WITH KEYBOARD'}
               </span>
             </div>
           </div>
