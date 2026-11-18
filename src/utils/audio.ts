@@ -1,7 +1,9 @@
 // Web Audio API Sound Synthesizers (Zero external audio assets required)
 
 let audioCtx: AudioContext | null = null;
+let pianoMasterBus: GainNode | null = null;
 let pianoCompressor: DynamicsCompressorNode | null = null;
+let pianoLimiter: WaveShaperNode | null = null;
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
@@ -14,17 +16,43 @@ function getAudioContext(): AudioContext {
   return audioCtx;
 }
 
-function getPianoCompressor(ctx: AudioContext): DynamicsCompressorNode {
-  if (!pianoCompressor || pianoCompressor.context !== ctx) {
-    pianoCompressor = ctx.createDynamicsCompressor();
-    pianoCompressor.threshold.setValueAtTime(-16, ctx.currentTime);
-    pianoCompressor.knee.setValueAtTime(24, ctx.currentTime);
-    pianoCompressor.ratio.setValueAtTime(6, ctx.currentTime);
-    pianoCompressor.attack.setValueAtTime(0.005, ctx.currentTime);
-    pianoCompressor.release.setValueAtTime(0.18, ctx.currentTime);
-    pianoCompressor.connect(ctx.destination);
+// Analog-style soft-saturation curve (tanh) for zero-latency anti-clipping headroom
+function makeSoftClipCurve(): Float32Array {
+  const n = 1024;
+  const curve = new Float32Array(n);
+  const k = 1.25;
+  const norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) {
+    const x = (i * 2) / n - 1;
+    curve[i] = Math.tanh(k * x) / norm;
   }
-  return pianoCompressor;
+  return curve;
+}
+
+// Master bus dedicated to piano with polyphonic headroom, optical compressor, and anti-clip soft limiter
+function getPianoMasterBus(ctx: AudioContext): GainNode {
+  if (!pianoMasterBus || pianoMasterBus.context !== ctx) {
+    pianoMasterBus = ctx.createGain();
+    pianoMasterBus.gain.setValueAtTime(0.70, ctx.currentTime);
+
+    // Transparent optical compressor
+    pianoCompressor = ctx.createDynamicsCompressor();
+    pianoCompressor.threshold.setValueAtTime(-18, ctx.currentTime);
+    pianoCompressor.knee.setValueAtTime(24, ctx.currentTime);
+    pianoCompressor.ratio.setValueAtTime(4, ctx.currentTime);
+    pianoCompressor.attack.setValueAtTime(0.002, ctx.currentTime);
+    pianoCompressor.release.setValueAtTime(0.20, ctx.currentTime);
+
+    // Anti-clipping soft wave-shaper limiter (guarantees zero digital crackling on multi-note chords)
+    pianoLimiter = ctx.createWaveShaper();
+    pianoLimiter.curve = makeSoftClipCurve();
+    pianoLimiter.oversample = '2x';
+
+    pianoMasterBus.connect(pianoCompressor);
+    pianoCompressor.connect(pianoLimiter);
+    pianoLimiter.connect(ctx.destination);
+  }
+  return pianoMasterBus;
 }
 
 /**
@@ -253,8 +281,8 @@ export function playEngineRevSound(intensity: number = 1.0) {
 
 /**
  * Pure Acoustic Grand Piano Synthesizer:
- * - Ultra-low buzz, natural acoustic warmth using pure sinusoidal string partials
- * - Fast-decaying harmonic overtones (2nd & 3rd harmonics dissolve naturally within 200-500ms)
+ * - Anti-clipping polyphonic headroom & soft-limiter to prevent any crackling on chords
+ * - Fast-decaying harmonic overtones (2nd & 3rd harmonics dissolve naturally within 160-450ms)
  * - Pure fundamental body sustain with zero static buzz, hiss, or distortion
  * - Gentle Butterworth lowpass contour (Q=0.707) for velvet, round wooden acoustic timbre
  * - Smooth felt-damper release
@@ -263,69 +291,72 @@ export function playPianoKey(freq: number, duration: number = 2.8): () => void {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
-    const compressor = getPianoCompressor(ctx);
+    const masterBus = getPianoMasterBus(ctx);
 
     // Master Voice Gain
     const voiceGain = ctx.createGain();
     voiceGain.gain.setValueAtTime(0.85, now);
 
-    // Pure Butterworth Lowpass Filter (Zero resonant peak Q=0.707; eliminates all harshness and high buzz)
+    // Pure Butterworth Lowpass Filter (Q=0.707; eliminates all harshness and high buzz)
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = 'lowpass';
     lowpass.Q.setValueAtTime(0.707, now);
-    const startCutoff = Math.min(freq * 3.0 + 450, 2400);
-    const settledCutoff = Math.min(freq * 1.5 + 200, 1100);
+    const startCutoff = Math.min(freq * 3.0 + 400, 2200);
+    const settledCutoff = Math.min(freq * 1.4 + 180, 1050);
     lowpass.frequency.setValueAtTime(startCutoff, now);
     lowpass.frequency.exponentialRampToValueAtTime(settledCutoff, now + 0.22);
 
     voiceGain.connect(lowpass);
-    lowpass.connect(compressor);
+    lowpass.connect(masterBus);
 
-    // 1. Primary Singing Fundamental String (Pure sine; deep, warm, round grand piano tone)
+    // 1. Primary Singing Fundamental String (Pure sine; calibrated headroom to prevent chord crackle)
     const fundamentalOsc = ctx.createOscillator();
     fundamentalOsc.type = 'sine';
     fundamentalOsc.frequency.setValueAtTime(freq, now);
 
     const fundamentalGain = ctx.createGain();
     fundamentalGain.gain.setValueAtTime(0.0001, now);
-    fundamentalGain.gain.linearRampToValueAtTime(0.65, now + 0.003); // 3ms crisp, soft attack
-    fundamentalGain.gain.exponentialRampToValueAtTime(0.48, now + 0.05); // natural hammer bounce
-    fundamentalGain.gain.exponentialRampToValueAtTime(0.0001, now + duration); // pure singing sustain
+    // Smooth 8ms attack (eliminates sub-millisecond digital click on chord strike)
+    fundamentalGain.gain.linearRampToValueAtTime(0.32, now + 0.008);
+    // Natural hammer rebound
+    fundamentalGain.gain.exponentialRampToValueAtTime(0.25, now + 0.06);
+    // Pure acoustic singing sustain
+    fundamentalGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     fundamentalOsc.connect(fundamentalGain);
     fundamentalGain.connect(voiceGain);
     fundamentalOsc.start(now);
     fundamentalOsc.stop(now + duration);
 
-    // 2. Soft Octave Harmonic (2x freq) - Fades out rapidly in 0.55s so NO sustained buzz remains
+    // 2. Soft Octave Harmonic (2x freq) - Fades out in 0.45s so NO sustained buzz remains
     const octaveOsc = ctx.createOscillator();
     octaveOsc.type = 'sine';
     octaveOsc.frequency.setValueAtTime(freq * 2, now);
 
     const octaveGain = ctx.createGain();
     octaveGain.gain.setValueAtTime(0.0001, now);
-    octaveGain.gain.linearRampToValueAtTime(0.14, now + 0.002);
-    octaveGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55); // completely gone in 550ms
+    octaveGain.gain.linearRampToValueAtTime(0.07, now + 0.006);
+    octaveGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
 
     octaveOsc.connect(octaveGain);
     octaveGain.connect(voiceGain);
     octaveOsc.start(now);
-    octaveOsc.stop(now + 0.6);
+    octaveOsc.stop(now + 0.5);
 
-    // 3. Gentle 3rd Harmonic (3x freq) - Very subtle strike chime that vanishes in 180ms
+    // 3. Gentle 3rd Harmonic (3x freq) - Vanishes in 160ms
     const fifthOsc = ctx.createOscillator();
     fifthOsc.type = 'sine';
     fifthOsc.frequency.setValueAtTime(freq * 3, now);
 
     const fifthGain = ctx.createGain();
     fifthGain.gain.setValueAtTime(0.0001, now);
-    fifthGain.gain.linearRampToValueAtTime(0.035, now + 0.002);
-    fifthGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18); // disappears in 180ms
+    fifthGain.gain.linearRampToValueAtTime(0.018, now + 0.005);
+    fifthGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
 
     fifthOsc.connect(fifthGain);
     fifthGain.connect(voiceGain);
     fifthOsc.start(now);
-    fifthOsc.stop(now + 0.22);
+    fifthOsc.stop(now + 0.2);
 
     // 4. Acoustic Damper Release (smoothly arrests the vibrating string on key release)
     let isReleased = false;
