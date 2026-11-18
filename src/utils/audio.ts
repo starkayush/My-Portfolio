@@ -17,11 +17,11 @@ function getAudioContext(): AudioContext {
 function getPianoCompressor(ctx: AudioContext): DynamicsCompressorNode {
   if (!pianoCompressor || pianoCompressor.context !== ctx) {
     pianoCompressor = ctx.createDynamicsCompressor();
-    pianoCompressor.threshold.setValueAtTime(-14, ctx.currentTime);
-    pianoCompressor.knee.setValueAtTime(30, ctx.currentTime);
-    pianoCompressor.ratio.setValueAtTime(10, ctx.currentTime);
-    pianoCompressor.attack.setValueAtTime(0.003, ctx.currentTime);
-    pianoCompressor.release.setValueAtTime(0.2, ctx.currentTime);
+    pianoCompressor.threshold.setValueAtTime(-16, ctx.currentTime);
+    pianoCompressor.knee.setValueAtTime(24, ctx.currentTime);
+    pianoCompressor.ratio.setValueAtTime(6, ctx.currentTime);
+    pianoCompressor.attack.setValueAtTime(0.005, ctx.currentTime);
+    pianoCompressor.release.setValueAtTime(0.18, ctx.currentTime);
     pianoCompressor.connect(ctx.destination);
   }
   return pianoCompressor;
@@ -251,38 +251,15 @@ export function playEngineRevSound(intensity: number = 1.0) {
   }
 }
 
-let pianoWave: PeriodicWave | null = null;
-
-function getPianoPeriodicWave(ctx: AudioContext): PeriodicWave {
-  if (!pianoWave) {
-    // Grand Piano Fourier Series Harmonics
-    // Acoustic overtone distribution modeled after a Steinway Concert Grand
-    const real = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-    const imag = new Float32Array([
-      0,      // DC
-      1.00,   // Fundamental (warm, full)
-      0.38,   // 2nd (octave)
-      0.15,   // 3rd (octave + 5th)
-      0.07,   // 4th (2 octaves)
-      0.03,   // 5th (2 octaves + 3rd)
-      0.015,  // 6th (2 octaves + 5th)
-      0.008,  // 7th
-      0.004,  // 8th
-      0.002   // 9th
-    ]);
-    pianoWave = ctx.createPeriodicWave(real, imag, { disableNormalization: false });
-  }
-  return pianoWave;
-}
-
 /**
- * Authentic Acoustic Grand Piano Synthesizer:
- * - Steinway harmonic series via Anti-Aliased PeriodicWave (eliminates harmonium/reed buzz)
- * - Deep wooden soundboard acoustic body
- * - Dynamic velocity lowpass damping (crisp hammer impact settling into warm singing sustain)
- * - Natural acoustic damper key release
+ * Pure Acoustic Grand Piano Synthesizer:
+ * - Ultra-low buzz, natural acoustic warmth using pure sinusoidal string partials
+ * - Fast-decaying harmonic overtones (2nd & 3rd harmonics dissolve naturally within 200-500ms)
+ * - Pure fundamental body sustain with zero static buzz, hiss, or distortion
+ * - Gentle Butterworth lowpass contour (Q=0.707) for velvet, round wooden acoustic timbre
+ * - Smooth felt-damper release
  */
-export function playPianoKey(freq: number, duration: number = 3.0): () => void {
+export function playPianoKey(freq: number, duration: number = 2.8): () => void {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
@@ -292,71 +269,65 @@ export function playPianoKey(freq: number, duration: number = 3.0): () => void {
     const voiceGain = ctx.createGain();
     voiceGain.gain.setValueAtTime(0.85, now);
 
-    // Dynamic Lowpass Filter (Acoustic string brightness: bright attack -> warm singing decay)
+    // Pure Butterworth Lowpass Filter (Zero resonant peak Q=0.707; eliminates all harshness and high buzz)
     const lowpass = ctx.createBiquadFilter();
     lowpass.type = 'lowpass';
-    lowpass.Q.setValueAtTime(0.9, now);
-    const startCutoff = Math.min(freq * 5 + 1800, 7500);
-    const endCutoff = Math.min(freq * 2.0 + 700, 2400);
+    lowpass.Q.setValueAtTime(0.707, now);
+    const startCutoff = Math.min(freq * 3.0 + 450, 2400);
+    const settledCutoff = Math.min(freq * 1.5 + 200, 1100);
     lowpass.frequency.setValueAtTime(startCutoff, now);
-    lowpass.frequency.exponentialRampToValueAtTime(endCutoff, now + 0.25);
+    lowpass.frequency.exponentialRampToValueAtTime(settledCutoff, now + 0.22);
 
     voiceGain.connect(lowpass);
     lowpass.connect(compressor);
 
-    // 1. Primary Piano String (Harmonic PeriodicWave)
-    const stringOsc = ctx.createOscillator();
-    stringOsc.setPeriodicWave(getPianoPeriodicWave(ctx));
-    stringOsc.frequency.setValueAtTime(freq, now);
+    // 1. Primary Singing Fundamental String (Pure sine; deep, warm, round grand piano tone)
+    const fundamentalOsc = ctx.createOscillator();
+    fundamentalOsc.type = 'sine';
+    fundamentalOsc.frequency.setValueAtTime(freq, now);
 
-    const stringGain = ctx.createGain();
-    stringGain.gain.setValueAtTime(0.0001, now);
-    stringGain.gain.linearRampToValueAtTime(0.68, now + 0.003); // 3ms crisp hammer attack
-    stringGain.gain.exponentialRampToValueAtTime(0.50, now + 0.06); // natural hammer rebound
-    stringGain.gain.exponentialRampToValueAtTime(0.0001, now + duration); // singing sustain
+    const fundamentalGain = ctx.createGain();
+    fundamentalGain.gain.setValueAtTime(0.0001, now);
+    fundamentalGain.gain.linearRampToValueAtTime(0.65, now + 0.003); // 3ms crisp, soft attack
+    fundamentalGain.gain.exponentialRampToValueAtTime(0.48, now + 0.05); // natural hammer bounce
+    fundamentalGain.gain.exponentialRampToValueAtTime(0.0001, now + duration); // pure singing sustain
 
-    stringOsc.connect(stringGain);
-    stringGain.connect(voiceGain);
-    stringOsc.start(now);
-    stringOsc.stop(now + duration);
+    fundamentalOsc.connect(fundamentalGain);
+    fundamentalGain.connect(voiceGain);
+    fundamentalOsc.start(now);
+    fundamentalOsc.stop(now + duration);
 
-    // 2. Piano Soundboard Fundamental Body (Warm, deep wooden acoustic tone)
-    const bodyOsc = ctx.createOscillator();
-    bodyOsc.type = 'sine';
-    bodyOsc.frequency.setValueAtTime(freq, now);
+    // 2. Soft Octave Harmonic (2x freq) - Fades out rapidly in 0.55s so NO sustained buzz remains
+    const octaveOsc = ctx.createOscillator();
+    octaveOsc.type = 'sine';
+    octaveOsc.frequency.setValueAtTime(freq * 2, now);
 
-    const bodyGain = ctx.createGain();
-    bodyGain.gain.setValueAtTime(0.0001, now);
-    bodyGain.gain.linearRampToValueAtTime(0.24, now + 0.004);
-    bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    const octaveGain = ctx.createGain();
+    octaveGain.gain.setValueAtTime(0.0001, now);
+    octaveGain.gain.linearRampToValueAtTime(0.14, now + 0.002);
+    octaveGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.55); // completely gone in 550ms
 
-    bodyOsc.connect(bodyGain);
-    bodyGain.connect(voiceGain);
-    bodyOsc.start(now);
-    bodyOsc.stop(now + duration);
+    octaveOsc.connect(octaveGain);
+    octaveGain.connect(voiceGain);
+    octaveOsc.start(now);
+    octaveOsc.stop(now + 0.6);
 
-    // 3. Subtle Felt Hammer Mechanical Strike (Soft 5ms high-frequency felt touch)
-    const hammerBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.006), ctx.sampleRate);
-    const hammerData = hammerBuffer.getChannelData(0);
-    for (let i = 0; i < hammerData.length; i++) {
-      hammerData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (ctx.sampleRate * 0.0015));
-    }
-    const hammerSource = ctx.createBufferSource();
-    hammerSource.buffer = hammerBuffer;
+    // 3. Gentle 3rd Harmonic (3x freq) - Very subtle strike chime that vanishes in 180ms
+    const fifthOsc = ctx.createOscillator();
+    fifthOsc.type = 'sine';
+    fifthOsc.frequency.setValueAtTime(freq * 3, now);
 
-    const hammerFilter = ctx.createBiquadFilter();
-    hammerFilter.type = 'bandpass';
-    hammerFilter.frequency.setValueAtTime(Math.min(freq * 3, 3000), now);
-    hammerFilter.Q.setValueAtTime(2.0, now);
+    const fifthGain = ctx.createGain();
+    fifthGain.gain.setValueAtTime(0.0001, now);
+    fifthGain.gain.linearRampToValueAtTime(0.035, now + 0.002);
+    fifthGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18); // disappears in 180ms
 
-    const hammerGain = ctx.createGain();
-    hammerGain.gain.setValueAtTime(0.05, now);
+    fifthOsc.connect(fifthGain);
+    fifthGain.connect(voiceGain);
+    fifthOsc.start(now);
+    fifthOsc.stop(now + 0.22);
 
-    hammerSource.connect(hammerFilter);
-    hammerFilter.connect(voiceGain);
-    hammerSource.start(now);
-
-    // 4. Acoustic Damper Release (smoothly arrests the vibrating strings on key release)
+    // 4. Acoustic Damper Release (smoothly arrests the vibrating string on key release)
     let isReleased = false;
     return () => {
       if (isReleased) return;
@@ -365,15 +336,17 @@ export function playPianoKey(freq: number, duration: number = 3.0): () => void {
         const releaseNow = ctx.currentTime;
         voiceGain.gain.cancelScheduledValues(releaseNow);
         voiceGain.gain.setValueAtTime(voiceGain.gain.value, releaseNow);
-        voiceGain.gain.exponentialRampToValueAtTime(0.0001, releaseNow + 0.12);
+        voiceGain.gain.exponentialRampToValueAtTime(0.0001, releaseNow + 0.14);
         setTimeout(() => {
           try {
-            stringOsc.stop();
-            bodyOsc.stop();
-            stringOsc.disconnect();
-            bodyOsc.disconnect();
+            fundamentalOsc.stop();
+            octaveOsc.stop();
+            fifthOsc.stop();
+            fundamentalOsc.disconnect();
+            octaveOsc.disconnect();
+            fifthOsc.disconnect();
           } catch {}
-        }, 140);
+        }, 160);
       } catch {}
     };
   } catch (err) {
