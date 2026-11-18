@@ -1,6 +1,7 @@
 // Web Audio API Sound Synthesizers (Zero external audio assets required)
 
 let audioCtx: AudioContext | null = null;
+let pianoCompressor: DynamicsCompressorNode | null = null;
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
@@ -11,6 +12,19 @@ function getAudioContext(): AudioContext {
     audioCtx.resume();
   }
   return audioCtx;
+}
+
+function getPianoCompressor(ctx: AudioContext): DynamicsCompressorNode {
+  if (!pianoCompressor || pianoCompressor.context !== ctx) {
+    pianoCompressor = ctx.createDynamicsCompressor();
+    pianoCompressor.threshold.setValueAtTime(-14, ctx.currentTime);
+    pianoCompressor.knee.setValueAtTime(30, ctx.currentTime);
+    pianoCompressor.ratio.setValueAtTime(10, ctx.currentTime);
+    pianoCompressor.attack.setValueAtTime(0.003, ctx.currentTime);
+    pianoCompressor.release.setValueAtTime(0.2, ctx.currentTime);
+    pianoCompressor.connect(ctx.destination);
+  }
+  return pianoCompressor;
 }
 
 /**
@@ -238,12 +252,13 @@ export function playEngineRevSound(intensity: number = 1.0) {
 }
 
 /**
- * Rich Polyphonic Grand Piano Synthesizer
+ * Rich Polyphonic Grand Piano Synthesizer with Acoustic Damping Release
  */
-export function playPianoKey(freq: number, duration: number = 2.0) {
+export function playPianoKey(freq: number, duration: number = 2.5): () => void {
   try {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
+    const compressor = getPianoCompressor(ctx);
 
     // Fundamental & Harmonics
     const osc1 = ctx.createOscillator();
@@ -265,7 +280,7 @@ export function playPianoKey(freq: number, duration: number = 2.0) {
     const gain3 = ctx.createGain();
 
     gain1.gain.setValueAtTime(0.001, now);
-    gain1.gain.linearRampToValueAtTime(0.45, now + 0.015);
+    gain1.gain.linearRampToValueAtTime(0.42, now + 0.015);
     gain1.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     gain2.gain.setValueAtTime(0.001, now);
@@ -281,7 +296,7 @@ export function playPianoKey(freq: number, duration: number = 2.0) {
     osc3.connect(gain3);
 
     const masterPiano = ctx.createGain();
-    masterPiano.gain.value = 0.85;
+    masterPiano.gain.setValueAtTime(0.85, now);
 
     gain1.connect(masterPiano);
     gain2.connect(masterPiano);
@@ -293,7 +308,7 @@ export function playPianoKey(freq: number, duration: number = 2.0) {
     filter.frequency.value = Math.min(freq * 6, 8000);
 
     masterPiano.connect(filter);
-    filter.connect(ctx.destination);
+    filter.connect(compressor);
 
     osc1.start(now);
     osc2.start(now);
@@ -302,8 +317,32 @@ export function playPianoKey(freq: number, duration: number = 2.0) {
     osc1.stop(now + duration);
     osc2.stop(now + duration);
     osc3.stop(now + duration);
+
+    // Return a release function for natural acoustic damper damping
+    let isReleased = false;
+    return () => {
+      if (isReleased) return;
+      isReleased = true;
+      try {
+        const releaseTime = ctx.currentTime;
+        masterPiano.gain.cancelScheduledValues(releaseTime);
+        masterPiano.gain.setValueAtTime(masterPiano.gain.value, releaseTime);
+        masterPiano.gain.exponentialRampToValueAtTime(0.0001, releaseTime + 0.16);
+        setTimeout(() => {
+          try {
+            osc1.stop();
+            osc2.stop();
+            osc3.stop();
+            osc1.disconnect();
+            osc2.disconnect();
+            osc3.disconnect();
+          } catch {}
+        }, 180);
+      } catch {}
+    };
   } catch (err) {
     console.warn('Piano audio error:', err);
+    return () => {};
   }
 }
 

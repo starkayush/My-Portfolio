@@ -1,100 +1,229 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Music, Volume2, Sparkles, Disc, Radio } from 'lucide-react';
+import { Music, Sparkles } from 'lucide-react';
 import { PIANO_NOTES, playPianoKey } from '../utils/audio';
+
+// Predefined Harmonic Chords for Quick Trigger & Harmony Recognition
+export const PIANO_CHORDS = [
+  {
+    name: 'C Major',
+    symbol: 'C Maj',
+    notes: ['C4', 'E4', 'G4'],
+    keys: ['A', 'D', 'G'],
+    numKey: '1',
+    description: 'Foundational bright tonic triad'
+  },
+  {
+    name: 'D Minor',
+    symbol: 'D min',
+    notes: ['D4', 'F4', 'A4'],
+    keys: ['S', 'F', 'H'],
+    numKey: '2',
+    description: 'Poignant, reflective, emotive'
+  },
+  {
+    name: 'E Minor',
+    symbol: 'E min',
+    notes: ['E4', 'G4', 'B4'],
+    keys: ['D', 'G', 'J'],
+    numKey: '3',
+    description: 'Deep, contemplative resonance'
+  },
+  {
+    name: 'F Major',
+    symbol: 'F Maj',
+    notes: ['F4', 'A4', 'C5'],
+    keys: ['F', 'H', 'K'],
+    numKey: '4',
+    description: 'Warm, soaring, triumphant subdominant'
+  },
+  {
+    name: 'G Major',
+    symbol: 'G Maj',
+    notes: ['G4', 'B4', 'D5'],
+    keys: ['G', 'J', 'L'],
+    numKey: '5',
+    description: 'Expansive, vibrant dominant harmony'
+  },
+  {
+    name: 'A Minor',
+    symbol: 'A min',
+    notes: ['A4', 'C5', 'E5'],
+    keys: ['H', 'K', ';'],
+    numKey: '6',
+    description: 'Soulful, nocturnal, cinematic melancholy'
+  },
+];
 
 export const PianoSection: React.FC = () => {
   const [activeKeys, setActiveKeys] = useState<string[]>([]);
-  const [lastPlayedNote, setLastPlayedNote] = useState<string>('C4 (Do)');
+  const [hudStatus, setHudStatus] = useState<string>('C4 (Do)');
+  const activeVoicesRef = useRef<Map<string, () => void>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Play piano key handler
-  const addActiveKey = (noteObj: (typeof PIANO_NOTES)[0]) => {
-    setActiveKeys((prev) => {
-      if (!prev.includes(noteObj.note)) {
-        return [...prev, noteObj.note];
+  // Determine current harmonic status label from active keys
+  const updateHudLabel = (currentActiveKeys: string[], lastNote?: string) => {
+    if (currentActiveKeys.length === 0) {
+      if (lastNote) setHudStatus(lastNote);
+      return;
+    }
+
+    // Check if current active notes match a recognized triad chord
+    const matchedChord = PIANO_CHORDS.find((chord) =>
+      chord.notes.every((n) => currentActiveKeys.includes(n))
+    );
+
+    if (matchedChord) {
+      setHudStatus(`${matchedChord.name} Chord [${matchedChord.keys.join(' • ')}]`);
+    } else if (currentActiveKeys.length > 1) {
+      setHudStatus(`Chord Voicing (${currentActiveKeys.join(' + ')})`);
+    } else {
+      const singleNoteObj = PIANO_NOTES.find((n) => n.note === currentActiveKeys[0]);
+      if (singleNoteObj) {
+        setHudStatus(`${singleNoteObj.note} - ${singleNoteObj.label}`);
       }
-      return prev;
+    }
+  };
+
+  // Press a single note (keyboard or mouse/touch down)
+  const pressNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
+    if (activeVoicesRef.current.has(noteObj.note)) return;
+
+    const stopFn = playPianoKey(noteObj.freq, 2.5);
+    activeVoicesRef.current.set(noteObj.note, stopFn);
+
+    const newActive = Array.from(activeVoicesRef.current.keys());
+    setActiveKeys(newActive);
+    updateHudLabel(newActive, `${noteObj.note} - ${noteObj.label}`);
+  };
+
+  // Release a single note (immediately turns key light back to normal & acoustic damper drops)
+  const releaseNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
+    const stopFn = activeVoicesRef.current.get(noteObj.note);
+    if (stopFn) {
+      stopFn();
+    }
+    activeVoicesRef.current.delete(noteObj.note);
+
+    const newActive = Array.from(activeVoicesRef.current.keys());
+    setActiveKeys(newActive);
+    updateHudLabel(newActive);
+  };
+
+  // Press a predefined chord (plays all chord notes together & turns all chord keys purple)
+  const pressChord = (chord: (typeof PIANO_CHORDS)[0]) => {
+    chord.notes.forEach((noteName) => {
+      const noteObj = PIANO_NOTES.find((n) => n.note === noteName);
+      if (noteObj && !activeVoicesRef.current.has(noteObj.note)) {
+        const stopFn = playPianoKey(noteObj.freq, 2.8);
+        activeVoicesRef.current.set(noteObj.note, stopFn);
+      }
     });
-    setLastPlayedNote(`${noteObj.note} - ${noteObj.label}`);
-    playPianoKey(noteObj.freq, 2.2);
+
+    const newActive = Array.from(activeVoicesRef.current.keys());
+    setActiveKeys(newActive);
+    setHudStatus(`${chord.name} Chord [${chord.keys.join(' • ')}]`);
   };
 
-  const removeActiveKey = (noteObj: (typeof PIANO_NOTES)[0]) => {
-    setActiveKeys((prev) => prev.filter((n) => n !== noteObj.note));
+  // Release a predefined chord (turns all chord keys back to normal)
+  const releaseChord = (chord: (typeof PIANO_CHORDS)[0]) => {
+    chord.notes.forEach((noteName) => {
+      const noteObj = PIANO_NOTES.find((n) => n.note === noteName);
+      if (noteObj) {
+        const stopFn = activeVoicesRef.current.get(noteObj.note);
+        if (stopFn) stopFn();
+        activeVoicesRef.current.delete(noteObj.note);
+      }
+    });
+
+    const newActive = Array.from(activeVoicesRef.current.keys());
+    setActiveKeys(newActive);
+    updateHudLabel(newActive);
   };
 
+  // Stop and release all notes (on blur or global mouseup)
+  const releaseAllNotes = () => {
+    activeVoicesRef.current.forEach((stopFn) => {
+      try {
+        stopFn();
+      } catch {}
+    });
+    activeVoicesRef.current.clear();
+    setActiveKeys([]);
+  };
 
-  // Keyboard shortcut listener (ignores typing in forms/inputs)
+  // Keyboard shortcut listener (handles chords, polyphony, hold-sustain, and clean release)
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-
-      // Ignore only if user is actively focused and typing inside a text input or textarea
+    const isTyping = () => {
       const activeEl = document.activeElement as HTMLElement | null;
-      if (
+      return (
         activeEl &&
         (activeEl.tagName === 'INPUT' ||
           activeEl.tagName === 'TEXTAREA' ||
           activeEl.isContentEditable)
-      ) {
-        return;
-      }
+      );
+    };
 
+    const findNoteFromEvent = (e: KeyboardEvent) => {
       const keyStr = e.key.toLowerCase();
       const codeStr = e.code;
 
-      const match = PIANO_NOTES.find((n) => {
+      return PIANO_NOTES.find((n) => {
         const noteKey = n.key.toLowerCase();
-
-        // Direct character match (case-insensitive)
         if (noteKey === keyStr) return true;
         if (n.key.toUpperCase() === e.key.toUpperCase()) return true;
-
-        // Code match (e.g. 'KeyA' for note A, 'KeyP' for note P)
         if (codeStr === `Key${n.key.toUpperCase()}`) return true;
-
-        // Dedicated matching for rightmost D#5 (P key & KeyP code)
         if (n.note === 'D#5' && (keyStr === 'p' || codeStr === 'KeyP')) return true;
-
-        // Dedicated matching for rightmost E5 (; key, : key & Semicolon code)
         if (n.note === 'E5' && (keyStr === ';' || keyStr === ':' || codeStr === 'Semicolon')) return true;
-
         return false;
       });
+    };
 
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (isTyping()) return;
+
+      // Number key chord shortcuts [1 - 6]
+      const chordByNum = PIANO_CHORDS.find((c) => c.numKey === e.key);
+      if (chordByNum) {
+        e.preventDefault();
+        pressChord(chordByNum);
+        return;
+      }
+
+      // Individual piano key matching
+      const match = findNoteFromEvent(e);
       if (match) {
         e.preventDefault();
-        addActiveKey(match);
+        pressNote(match);
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      const keyStr = e.key.toLowerCase();
-      const codeStr = e.code;
+      // Number key chord shortcuts release
+      const chordByNum = PIANO_CHORDS.find((c) => c.numKey === e.key);
+      if (chordByNum) {
+        releaseChord(chordByNum);
+        return;
+      }
 
-      const match = PIANO_NOTES.find((n) => {
-        const noteKey = n.key.toLowerCase();
-        if (noteKey === keyStr) return true;
-        if (n.key.toUpperCase() === e.key.toUpperCase()) return true;
-        if (codeStr === `Key${n.key.toUpperCase()}`) return true;
-        if (n.note === 'D#5' && (keyStr === 'p' || codeStr === 'KeyP')) return true;
-        if (n.note === 'E5' && (keyStr === ';' || keyStr === ':' || codeStr === 'Semicolon')) return true;
-        return false;
-      });
-
+      const match = findNoteFromEvent(e);
       if (match) {
-        removeActiveKey(match);
+        releaseNote(match);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', releaseAllNotes);
+    window.addEventListener('mouseup', releaseAllNotes);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', releaseAllNotes);
+      window.removeEventListener('mouseup', releaseAllNotes);
     };
   }, []);
-
 
   // Gliding Musical Waveforms & Particle Canvas in Background
   useEffect(() => {
@@ -114,7 +243,6 @@ export const PianoSection: React.FC = () => {
     };
     window.addEventListener('resize', handleResize);
 
-    // Floating notes particles
     const symbols = ['♪', '♫', '♩', '♬', '𝄞'];
     const particles = Array.from({ length: 28 }, () => ({
       x: Math.random() * width,
@@ -122,7 +250,7 @@ export const PianoSection: React.FC = () => {
       symbol: symbols[Math.floor(Math.random() * symbols.length)],
       size: Math.random() * 16 + 12,
       speedX: (Math.random() - 0.5) * 0.8,
-      speedY: -Math.random() * 0.7 - 0.3, // gently glide upwards
+      speedY: -Math.random() * 0.7 - 0.3,
       opacity: Math.random() * 0.4 + 0.1,
     }));
 
@@ -131,7 +259,7 @@ export const PianoSection: React.FC = () => {
     const render = () => {
       ctx.clearRect(0, 0, width, height);
 
-      // Draw flowing sine waveform (Acoustic wave harmonics)
+      // Acoustic wave harmonics
       phase += 0.02;
       ctx.beginPath();
       ctx.lineWidth = 1.5;
@@ -147,20 +275,16 @@ export const PianoSection: React.FC = () => {
       }
       ctx.stroke();
 
-      // Second harmonic wave
       ctx.beginPath();
       ctx.lineWidth = 1;
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.15)';
       for (let x = 0; x < width; x += 3) {
-        const y =
-          height * 0.55 +
-          Math.cos(x * 0.006 - phase * 0.7) * 35;
+        const y = height * 0.55 + Math.cos(x * 0.006 - phase * 0.7) * 35;
         if (x === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.stroke();
 
-      // Draw drifting musical glyphs
       ctx.font = '16px serif';
       particles.forEach((p) => {
         p.y += p.speedY;
@@ -188,7 +312,7 @@ export const PianoSection: React.FC = () => {
     };
   }, []);
 
-  // Separate white keys and black keys for realistic layout
+  // Separate natural white keys and accidental black keys
   const whiteKeys = PIANO_NOTES.filter((n) => !n.isBlack);
   const blackKeys = PIANO_NOTES.filter((n) => n.isBlack);
 
@@ -214,7 +338,7 @@ export const PianoSection: React.FC = () => {
           </div>
           <p className="text-sm text-neutral-400 max-w-md">
             Recently began my journey learning the piano. Discovering the interplay between mathematical timing,
-            frequency harmonics, and heartfelt musical storytelling.
+            frequency harmonics, polyphonic chord voicings, and heartfelt musical storytelling.
           </p>
         </div>
 
@@ -225,16 +349,16 @@ export const PianoSection: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full bg-purple-500 animate-pulse shadow-[0_0_10px_#a855f7]" />
               <span className="text-xs font-mono tracking-widest uppercase text-neutral-300">
-                Acoustic Grand Synthesizer • Web Audio
+                Acoustic Grand Synthesizer • Polyphonic Chords Active
               </span>
             </div>
 
             <div className="flex items-center gap-4">
               <span className="text-xs font-mono text-neutral-400">
-                LAST NOTE: <span className="text-purple-400 font-bold">{lastPlayedNote}</span>
+                ACTIVE STATUS: <span className="text-purple-400 font-bold tracking-wide">{hudStatus}</span>
               </span>
               <span className="hidden sm:inline-block text-[11px] font-mono text-neutral-500 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800">
-                KEYBOARD INPUT ACTIVE
+                POLYPHONIC CHORDS ENABLED
               </span>
             </div>
           </div>
@@ -249,20 +373,32 @@ export const PianoSection: React.FC = () => {
                   return (
                     <button
                       key={key.note}
-                      onMouseDown={() => addActiveKey(key)}
-                      onMouseUp={() => removeActiveKey(key)}
-                      onMouseLeave={() => removeActiveKey(key)}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pressNote(key);
+                      }}
+                      onMouseUp={() => releaseNote(key)}
+                      onMouseLeave={() => releaseNote(key)}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        pressNote(key);
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        releaseNote(key);
+                      }}
+                      onTouchCancel={() => releaseNote(key)}
                       data-cursor="piano"
-                      className={`relative w-10 sm:w-14 h-48 sm:h-64 rounded-b-lg flex flex-col justify-end items-center pb-4 transition-all duration-150 transform ${
+                      className={`relative w-10 sm:w-14 h-48 sm:h-64 rounded-b-lg flex flex-col justify-end items-center pb-4 transition-all duration-100 transform ${
                         isCurrent
-                          ? 'bg-gradient-to-t from-purple-400 to-white translate-y-1 shadow-[0_0_20px_#a855f7]'
+                          ? 'bg-gradient-to-t from-purple-400 to-white translate-y-1 shadow-[0_0_25px_#a855f7] border-b-4 border-purple-500'
                           : 'bg-gradient-to-b from-neutral-100 to-neutral-200 hover:bg-neutral-50 text-neutral-800 shadow-md'
                       }`}
                     >
-                      <span className="text-[10px] sm:text-xs font-bold text-neutral-700">
+                      <span className={`text-[10px] sm:text-xs font-bold ${isCurrent ? 'text-purple-950 font-black' : 'text-neutral-700'}`}>
                         {key.note}
                       </span>
-                      <span className="text-[9px] font-mono text-neutral-400 mt-1 uppercase">
+                      <span className={`text-[9px] font-mono mt-1 uppercase ${isCurrent ? 'text-purple-800 font-bold' : 'text-neutral-400'}`}>
                         [{key.key}]
                       </span>
                     </button>
@@ -273,7 +409,6 @@ export const PianoSection: React.FC = () => {
               {/* Accidental Black Keys (Positioned absolutely over white keys) */}
               <div className="absolute top-3 sm:top-4 left-3 sm:left-4 right-3 sm:right-4 h-32 sm:h-40 pointer-events-none flex">
                 {whiteKeys.map((wKey, index) => {
-                  // Find matching sharp note for this specific white key and octave (e.g. C4 -> C#4, D4 -> D#4, C5 -> C#5, D5 -> D#5)
                   const sharpNoteName = wKey.note.slice(0, 1) + '#' + wKey.note.slice(1);
                   const blackKey = blackKeys.find((b) => b.note === sharpNoteName);
 
@@ -287,21 +422,33 @@ export const PianoSection: React.FC = () => {
                       <button
                         onMouseDown={(e) => {
                           e.stopPropagation();
-                          addActiveKey(blackKey);
+                          e.preventDefault();
+                          pressNote(blackKey);
                         }}
-                        onMouseUp={() => removeActiveKey(blackKey)}
-                        onMouseLeave={() => removeActiveKey(blackKey)}
+                        onMouseUp={() => releaseNote(blackKey)}
+                        onMouseLeave={() => releaseNote(blackKey)}
+                        onTouchStart={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          pressNote(blackKey);
+                        }}
+                        onTouchEnd={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          releaseNote(blackKey);
+                        }}
+                        onTouchCancel={() => releaseNote(blackKey)}
                         data-cursor="piano"
-                        className={`pointer-events-auto absolute -right-3.5 sm:-right-4 w-7 sm:w-8 h-32 sm:h-40 rounded-b-md z-20 flex flex-col justify-end items-center pb-3 transition-all duration-150 border border-neutral-700 ${
+                        className={`pointer-events-auto absolute -right-3.5 sm:-right-4 w-7 sm:w-8 h-32 sm:h-40 rounded-b-md z-20 flex flex-col justify-end items-center pb-3 transition-all duration-100 border ${
                           isCurrent
-                            ? 'bg-purple-600 border-purple-300 shadow-[0_0_20px_#c084fc] translate-y-0.5'
-                            : 'bg-gradient-to-b from-neutral-950 via-neutral-900 to-neutral-800 hover:bg-neutral-800 text-neutral-400 shadow-xl'
+                            ? 'bg-purple-600 border-purple-300 shadow-[0_0_25px_#c084fc] translate-y-0.5'
+                            : 'bg-gradient-to-b from-neutral-950 via-neutral-900 to-neutral-800 hover:bg-neutral-800 text-neutral-400 border-neutral-700 shadow-xl'
                         }`}
                       >
-                        <span className="text-[9px] font-bold text-neutral-300">
+                        <span className={`text-[9px] font-bold ${isCurrent ? 'text-white' : 'text-neutral-300'}`}>
                           {blackKey.note}
                         </span>
-                        <span className="text-[8px] font-mono text-purple-400 uppercase">
+                        <span className={`text-[8px] font-mono uppercase ${isCurrent ? 'text-purple-200' : 'text-purple-400'}`}>
                           [{blackKey.key}]
                         </span>
                       </button>
@@ -312,13 +459,56 @@ export const PianoSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Quick Playable Chords / Melodies Hint */}
-          <div className="mt-8 text-center">
-            <div className="inline-flex items-center gap-2 text-xs font-mono text-neutral-400 bg-neutral-900/60 px-4 py-2 rounded-full border border-neutral-800">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>Try playing on your physical keyboard:</span>
-              <span className="text-purple-300 font-semibold">[ A - D - G - K ]</span>
-              <span className="text-neutral-500">• (C Major Chord progression)</span>
+          {/* Quick Playable Chords Voicings Rack */}
+          <div className="mt-8 pt-6 border-t border-neutral-800/80">
+            <div className="flex flex-col items-center gap-3">
+              <div className="inline-flex items-center gap-2 text-xs font-mono text-purple-400">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>ONE-TOUCH CHORDS (Click & Hold or press [1 - 6]):</span>
+              </div>
+
+              <div className="flex flex-wrap justify-center gap-2.5 sm:gap-3 max-w-4xl">
+                {PIANO_CHORDS.map((chord) => {
+                  const isChordActive = chord.notes.every((n) => activeKeys.includes(n));
+                  return (
+                    <button
+                      key={chord.name}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pressChord(chord);
+                      }}
+                      onMouseUp={() => releaseChord(chord)}
+                      onMouseLeave={() => releaseChord(chord)}
+                      onTouchStart={(e) => {
+                        e.preventDefault();
+                        pressChord(chord);
+                      }}
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        releaseChord(chord);
+                      }}
+                      onTouchCancel={() => releaseChord(chord)}
+                      className={`group relative px-4 py-2 rounded-xl text-xs font-mono transition-all duration-150 border flex items-center gap-2 ${
+                        isChordActive
+                          ? 'bg-purple-600/30 border-purple-400 text-white shadow-[0_0_20px_rgba(168,85,247,0.4)] scale-105'
+                          : 'bg-neutral-900/80 border-neutral-800 text-neutral-300 hover:border-purple-800/60 hover:text-white'
+                      }`}
+                    >
+                      <span className="w-4 h-4 rounded bg-purple-950/80 text-purple-300 text-[10px] font-bold flex items-center justify-center border border-purple-800/40">
+                        {chord.numKey}
+                      </span>
+                      <span className="font-semibold">{chord.symbol}</span>
+                      <span className="text-[10px] text-neutral-500 group-hover:text-neutral-400">
+                        [{chord.keys.join('+')}]
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-[11px] font-mono text-neutral-500 mt-2 text-center">
+                Tip: Press 2 or 3 keys together on your physical keyboard (e.g. <span className="text-purple-300 font-semibold">[A + D + G]</span> for C Maj) • Keys illuminate purple while held down and instantly revert to white on release.
+              </p>
             </div>
           </div>
         </div>
