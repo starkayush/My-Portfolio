@@ -60,6 +60,11 @@ export const PianoSection: React.FC = () => {
   const activeVoicesRef = useRef<Map<string, () => void>>(new Map());
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  // Mouse & Trackpad Gliding state
+  const isPointerDownRef = useRef<boolean>(false);
+  const lastGlidedNoteRef = useRef<string | null>(null);
+  const glideClearTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   // Determine current harmonic status label from active keys
   const updateHudLabel = (currentActiveKeys: string[], lastNote?: string) => {
     if (currentActiveKeys.length === 0) {
@@ -67,7 +72,6 @@ export const PianoSection: React.FC = () => {
       return;
     }
 
-    // Check if current active notes match a recognized triad chord
     const matchedChord = PIANO_CHORDS.find((chord) =>
       chord.notes.every((n) => currentActiveKeys.includes(n))
     );
@@ -84,11 +88,11 @@ export const PianoSection: React.FC = () => {
     }
   };
 
-  // Press a single note (keyboard or mouse/touch down)
-  const pressNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
+  // Keyboard note press (hold-sustain with damper release)
+  const pressKeyboardNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
     if (activeVoicesRef.current.has(noteObj.note)) return;
 
-    const stopFn = playPianoKey(noteObj.freq, 2.5);
+    const stopFn = playPianoKey(noteObj.freq, 2.8);
     activeVoicesRef.current.set(noteObj.note, stopFn);
 
     const newActive = Array.from(activeVoicesRef.current.keys());
@@ -96,8 +100,7 @@ export const PianoSection: React.FC = () => {
     updateHudLabel(newActive, `${noteObj.note} - ${noteObj.label}`);
   };
 
-  // Release a single note (immediately turns key light back to normal & acoustic damper drops)
-  const releaseNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
+  const releaseKeyboardNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
     const stopFn = activeVoicesRef.current.get(noteObj.note);
     if (stopFn) {
       stopFn();
@@ -109,7 +112,82 @@ export const PianoSection: React.FC = () => {
     updateHudLabel(newActive);
   };
 
-  // Press a predefined chord (plays all chord notes together & turns all chord keys purple)
+  // Gliding Piano trigger (used for mouse/trackpad tap, drag glissando, and scroll sweeps)
+  // Plays with the EXACT same full, solid acoustic intensity as keyboard taps (no touch sensitivity attenuation)
+  const triggerGlideNote = (noteObj: (typeof PIANO_NOTES)[0]) => {
+    if (lastGlidedNoteRef.current === noteObj.note) return;
+    lastGlidedNoteRef.current = noteObj.note;
+
+    // Full acoustic grand piano sound with generous natural decay
+    playPianoKey(noteObj.freq, 2.6);
+
+    // Light up key in vibrant purple
+    setActiveKeys([noteObj.note]);
+    setHudStatus(`${noteObj.note} - ${noteObj.label} (Gliding)`);
+
+    if (glideClearTimerRef.current) clearTimeout(glideClearTimerRef.current);
+    glideClearTimerRef.current = setTimeout(() => {
+      if (!isPointerDownRef.current) {
+        setActiveKeys([]);
+      }
+    }, 280);
+  };
+
+  const handlePointerDownKey = (noteObj: (typeof PIANO_NOTES)[0]) => {
+    isPointerDownRef.current = true;
+    lastGlidedNoteRef.current = null;
+    triggerGlideNote(noteObj);
+  };
+
+  const handlePointerEnterKey = (noteObj: (typeof PIANO_NOTES)[0]) => {
+    if (isPointerDownRef.current) {
+      triggerGlideNote(noteObj);
+    }
+  };
+
+  // Trackpad / Wheel scroll gliding
+  const handleWheelGlide = (e: React.WheelEvent) => {
+    // If scrolling horizontally or vertically over the piano, glide across notes
+    const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+    const keyBtn = targetEl?.closest('[data-note]') as HTMLElement | null;
+    const noteName = keyBtn?.getAttribute('data-note');
+
+    if (noteName) {
+      const noteObj = PIANO_NOTES.find((n) => n.note === noteName);
+      if (noteObj && noteObj.note !== lastGlidedNoteRef.current) {
+        triggerGlideNote(noteObj);
+        return;
+      }
+    }
+
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (Math.abs(delta) > 10) {
+      const currentIdx = PIANO_NOTES.findIndex(
+        (n) => n.note === (lastGlidedNoteRef.current || 'C4')
+      );
+      const step = delta > 0 ? 1 : -1;
+      const nextIdx = Math.max(0, Math.min(PIANO_NOTES.length - 1, currentIdx + step));
+      triggerGlideNote(PIANO_NOTES[nextIdx]);
+    }
+  };
+
+  // Touch move glissando for touchscreen & trackpad gestures
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    if (!touch) return;
+    const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+    const keyBtn = targetEl?.closest('[data-note]') as HTMLElement | null;
+    const noteName = keyBtn?.getAttribute('data-note');
+
+    if (noteName) {
+      const noteObj = PIANO_NOTES.find((n) => n.note === noteName);
+      if (noteObj) {
+        triggerGlideNote(noteObj);
+      }
+    }
+  };
+
+  // Press a predefined chord
   const pressChord = (chord: (typeof PIANO_CHORDS)[0]) => {
     chord.notes.forEach((noteName) => {
       const noteObj = PIANO_NOTES.find((n) => n.note === noteName);
@@ -124,7 +202,6 @@ export const PianoSection: React.FC = () => {
     setHudStatus(`${chord.name} Chord [${chord.keys.join(' • ')}]`);
   };
 
-  // Release a predefined chord (turns all chord keys back to normal)
   const releaseChord = (chord: (typeof PIANO_CHORDS)[0]) => {
     chord.notes.forEach((noteName) => {
       const noteObj = PIANO_NOTES.find((n) => n.note === noteName);
@@ -140,8 +217,10 @@ export const PianoSection: React.FC = () => {
     updateHudLabel(newActive);
   };
 
-  // Stop and release all notes (on blur or global mouseup)
+  // Global releases
   const releaseAllNotes = () => {
+    isPointerDownRef.current = false;
+    lastGlidedNoteRef.current = null;
     activeVoicesRef.current.forEach((stopFn) => {
       try {
         stopFn();
@@ -151,7 +230,7 @@ export const PianoSection: React.FC = () => {
     setActiveKeys([]);
   };
 
-  // Keyboard shortcut listener (handles chords, polyphony, hold-sustain, and clean release)
+  // Keyboard shortcut listener (supports chords and polyphony)
   useEffect(() => {
     const isTyping = () => {
       const activeEl = document.activeElement as HTMLElement | null;
@@ -182,7 +261,6 @@ export const PianoSection: React.FC = () => {
       if (e.repeat) return;
       if (isTyping()) return;
 
-      // Number key chord shortcuts [1 - 6]
       const chordByNum = PIANO_CHORDS.find((c) => c.numKey === e.key);
       if (chordByNum) {
         e.preventDefault();
@@ -190,16 +268,14 @@ export const PianoSection: React.FC = () => {
         return;
       }
 
-      // Individual piano key matching
       const match = findNoteFromEvent(e);
       if (match) {
         e.preventDefault();
-        pressNote(match);
+        pressKeyboardNote(match);
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      // Number key chord shortcuts release
       const chordByNum = PIANO_CHORDS.find((c) => c.numKey === e.key);
       if (chordByNum) {
         releaseChord(chordByNum);
@@ -208,20 +284,32 @@ export const PianoSection: React.FC = () => {
 
       const match = findNoteFromEvent(e);
       if (match) {
-        releaseNote(match);
+        releaseKeyboardNote(match);
+      }
+    };
+
+    const handleGlobalMouseUp = () => {
+      if (isPointerDownRef.current) {
+        isPointerDownRef.current = false;
+        lastGlidedNoteRef.current = null;
+        setTimeout(() => {
+          if (!isPointerDownRef.current && activeVoicesRef.current.size === 0) {
+            setActiveKeys([]);
+          }
+        }, 120);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', releaseAllNotes);
-    window.addEventListener('mouseup', releaseAllNotes);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', releaseAllNotes);
-      window.removeEventListener('mouseup', releaseAllNotes);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
     };
   }, []);
 
@@ -259,7 +347,6 @@ export const PianoSection: React.FC = () => {
     const render = () => {
       ctx.clearRect(0, 0, width, height);
 
-      // Acoustic wave harmonics
       phase += 0.02;
       ctx.beginPath();
       ctx.lineWidth = 1.5;
@@ -312,7 +399,6 @@ export const PianoSection: React.FC = () => {
     };
   }, []);
 
-  // Separate natural white keys and accidental black keys
   const whiteKeys = PIANO_NOTES.filter((n) => !n.isBlack);
   const blackKeys = PIANO_NOTES.filter((n) => n.isBlack);
 
@@ -337,8 +423,8 @@ export const PianoSection: React.FC = () => {
             </h2>
           </div>
           <p className="text-sm text-neutral-400 max-w-md">
-            Recently began my journey learning the piano. Discovering the interplay between mathematical timing,
-            frequency harmonics, polyphonic chord voicings, and heartfelt musical storytelling.
+            Discovering the interplay between mathematical timing, frequency harmonics, polyphonic chord voicings,
+            and sweeping acoustic glissandos.
           </p>
         </div>
 
@@ -349,22 +435,26 @@ export const PianoSection: React.FC = () => {
             <div className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full bg-purple-500 animate-pulse shadow-[0_0_10px_#a855f7]" />
               <span className="text-xs font-mono tracking-widest uppercase text-neutral-300">
-                Acoustic Grand Synthesizer • Polyphonic Chords Active
+                Acoustic Grand Synthesizer • Gliding & Polyphonic
               </span>
             </div>
 
             <div className="flex items-center gap-4">
               <span className="text-xs font-mono text-neutral-400">
-                ACTIVE STATUS: <span className="text-purple-400 font-bold tracking-wide">{hudStatus}</span>
+                STATUS: <span className="text-purple-400 font-bold tracking-wide">{hudStatus}</span>
               </span>
               <span className="hidden sm:inline-block text-[11px] font-mono text-neutral-500 px-2 py-0.5 rounded bg-neutral-900 border border-neutral-800">
-                POLYPHONIC CHORDS ENABLED
+                TAP • DRAG • SCROLL TO GLIDE
               </span>
             </div>
           </div>
 
           {/* Interactive Gliding Piano Keyboard */}
-          <div className="relative flex justify-center overflow-x-auto py-6 select-none">
+          <div
+            className="relative flex justify-center overflow-x-auto py-6 select-none cursor-pointer"
+            onWheel={handleWheelGlide}
+            onTouchMove={handleTouchMove}
+          >
             <div className="relative inline-flex bg-neutral-900 p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
               {/* Natural White Keys */}
               <div className="flex gap-1.5 sm:gap-2">
@@ -373,21 +463,21 @@ export const PianoSection: React.FC = () => {
                   return (
                     <button
                       key={key.note}
+                      data-note={key.note}
                       onMouseDown={(e) => {
                         e.preventDefault();
-                        pressNote(key);
+                        handlePointerDownKey(key);
                       }}
-                      onMouseUp={() => releaseNote(key)}
-                      onMouseLeave={() => releaseNote(key)}
+                      onMouseEnter={() => handlePointerEnterKey(key)}
                       onTouchStart={(e) => {
                         e.preventDefault();
-                        pressNote(key);
+                        handlePointerDownKey(key);
                       }}
-                      onTouchEnd={(e) => {
-                        e.preventDefault();
-                        releaseNote(key);
+                      onTouchEnd={() => {
+                        isPointerDownRef.current = false;
+                        lastGlidedNoteRef.current = null;
+                        setTimeout(() => setActiveKeys([]), 120);
                       }}
-                      onTouchCancel={() => releaseNote(key)}
                       data-cursor="piano"
                       className={`relative w-10 sm:w-14 h-48 sm:h-64 rounded-b-lg flex flex-col justify-end items-center pb-4 transition-all duration-100 transform ${
                         isCurrent
@@ -420,24 +510,23 @@ export const PianoSection: React.FC = () => {
                   return (
                     <div key={blackKey.note} className="w-10 sm:w-14 mr-1.5 sm:mr-2 relative flex-shrink-0">
                       <button
+                        data-note={blackKey.note}
                         onMouseDown={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
-                          pressNote(blackKey);
+                          handlePointerDownKey(blackKey);
                         }}
-                        onMouseUp={() => releaseNote(blackKey)}
-                        onMouseLeave={() => releaseNote(blackKey)}
+                        onMouseEnter={() => handlePointerEnterKey(blackKey)}
                         onTouchStart={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
-                          pressNote(blackKey);
+                          handlePointerDownKey(blackKey);
                         }}
-                        onTouchEnd={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          releaseNote(blackKey);
+                        onTouchEnd={() => {
+                          isPointerDownRef.current = false;
+                          lastGlidedNoteRef.current = null;
+                          setTimeout(() => setActiveKeys([]), 120);
                         }}
-                        onTouchCancel={() => releaseNote(blackKey)}
                         data-cursor="piano"
                         className={`pointer-events-auto absolute -right-3.5 sm:-right-4 w-7 sm:w-8 h-32 sm:h-40 rounded-b-md z-20 flex flex-col justify-end items-center pb-3 transition-all duration-100 border ${
                           isCurrent
@@ -507,7 +596,7 @@ export const PianoSection: React.FC = () => {
               </div>
 
               <p className="text-[11px] font-mono text-neutral-500 mt-2 text-center">
-                Tip: Press 2 or 3 keys together on your physical keyboard (e.g. <span className="text-purple-300 font-semibold">[A + D + G]</span> for C Maj) • Keys illuminate purple while held down and instantly revert to white on release.
+                ✨ <span className="text-purple-300 font-semibold">Gliding Piano Active</span>: Tap & drag across keys or scroll with your trackpad/mouse to sweep through notes with full grand piano resonance • Physical keyboard keys and chords [1-6] play with identical full intensity.
               </p>
             </div>
           </div>
