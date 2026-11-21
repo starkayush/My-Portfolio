@@ -24,11 +24,14 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onEnter }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Listen for Enter key
+  // Listen for Enter key & suppress accidental scrolling keys while on intro
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter') {
         handleTriggerLaunch();
+      }
+      if ([' ', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(e.key)) {
+        e.preventDefault();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -45,9 +48,11 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onEnter }) => {
 
   return (
     <div
-      className={`fixed inset-0 z-40 bg-[#040407] flex flex-col items-center justify-center px-6 transition-all duration-700 ease-out select-none ${
+      className={`fixed inset-0 z-40 bg-[#040407] flex flex-col items-center justify-center px-6 transition-all duration-700 ease-out select-none overflow-hidden ${
         isLaunching ? 'opacity-0 scale-105 pointer-events-none filter blur-sm' : 'opacity-100 scale-100'
       }`}
+      onWheel={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
     >
       {/* Background Subtle Gradient & Grid */}
       <div className="absolute inset-0 bg-radial-vignette opacity-70 pointer-events-none" />
@@ -74,7 +79,7 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ onEnter }) => {
         </div>
 
         {/* Minimalist Terminal Line */}
-        <div className="flex items-center gap-2 text-xs font-mono text-neutral-400 mb-6 bg-black/60 px-4 py-2 rounded-lg border border-neutral-800/80 shadow-inner w-full max-w-md text-left overflow-x-auto">
+        <div className="flex items-center gap-2 text-xs font-mono text-neutral-400 mb-6 bg-black/60 px-4 py-2 rounded-lg border border-neutral-800/80 shadow-inner w-full max-w-md text-left overflow-x-hidden">
           <Terminal className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
           <span className="text-cyan-400 font-semibold">$</span>
           <span className="text-neutral-300 tracking-tight">{typedCommand}</span>
