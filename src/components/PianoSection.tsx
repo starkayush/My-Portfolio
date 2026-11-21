@@ -173,31 +173,6 @@ export const PianoSection: React.FC = () => {
     }
   };
 
-  // Trackpad / Wheel scroll gliding
-  const handleWheelGlide = (e: React.WheelEvent) => {
-    // If scrolling horizontally or vertically over the piano, glide across notes
-    const targetEl = document.elementFromPoint(e.clientX, e.clientY);
-    const keyBtn = targetEl?.closest('[data-note]') as HTMLElement | null;
-    const noteName = keyBtn?.getAttribute('data-note');
-
-    if (noteName) {
-      const noteObj = PIANO_NOTES.find((n) => n.note === noteName);
-      if (noteObj && noteObj.note !== lastGlidedNoteRef.current) {
-        triggerGlideNote(noteObj);
-        return;
-      }
-    }
-
-    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    if (Math.abs(delta) > 10) {
-      const currentIdx = PIANO_NOTES.findIndex(
-        (n) => n.note === (lastGlidedNoteRef.current || 'C4')
-      );
-      const step = delta > 0 ? 1 : -1;
-      const nextIdx = Math.max(0, Math.min(PIANO_NOTES.length - 1, currentIdx + step));
-      triggerGlideNote(PIANO_NOTES[nextIdx]);
-    }
-  };
 
   // Touch move glissando for touchscreen & trackpad gestures
   const handleTouchMove = (e: React.TouchEvent) => {
@@ -494,7 +469,6 @@ export const PianoSection: React.FC = () => {
           {/* Interactive Gliding Piano Keyboard */}
           <div
             className="relative flex justify-center overflow-x-auto py-6 select-none cursor-pointer"
-            onWheel={handleWheelGlide}
             onTouchMove={handleTouchMove}
           >
             <div className="relative inline-flex bg-neutral-900 p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
@@ -638,7 +612,7 @@ export const PianoSection: React.FC = () => {
               </div>
 
               <p className="text-[11px] font-mono text-neutral-500 mt-2 text-center">
-                ✨ <span className="text-purple-300 font-semibold">Gliding Piano Active</span>: Tap & drag across keys or scroll with your trackpad/mouse to sweep through notes with full grand piano resonance • Physical keyboard keys and chords [1-6] play with identical full intensity.
+                ✨ <span className="text-purple-300 font-semibold">Gliding Piano Active</span>: Tap & drag across keys (or swipe on touch) to sweep through notes with full grand piano resonance • Physical keyboard keys and chords [1-6] play with identical full intensity.
               </p>
             </div>
           </div>
