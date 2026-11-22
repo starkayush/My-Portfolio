@@ -625,7 +625,7 @@ export const PianoSection: React.FC = () => {
               Why Piano?
             </h3>
             <p className="text-xs text-neutral-400 leading-relaxed">
-              Piano requires two independent hands moving in syncopated rhythms, reading patterns, and maintaining mental clarity. It is the ultimate mental exercise for a software engineer—mirroring concurrency, multithreading, and structural harmony.
+              Piano requires two independent hands moving in syncopated rhythms, reading patterns, and maintaining mental clarity. It&apos;s the ultimate mental exercise for a software engineer—mirroring concurrency, multithreading, and structural harmony. &quot;Music theory&quot; in itself is a completely different world, and I want to live it!
             </p>
           </div>
 
