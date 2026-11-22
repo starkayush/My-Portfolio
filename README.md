@@ -107,7 +107,7 @@ Synthesizing academic rigor with hands-on software development:
 ---
 
 ### 6. 📬 Direct Communication & Transmission Console
-- **Direct Website Transmission**: Visitors can submit messages directly through the on-page console without needing any desktop email application installed (via FormSubmit AJAX integration to `starayush.in@gmail.com`).
+- **Direct Website Transmission**: Visitors can submit messages directly through the on-page console without needing any desktop email application installed (via FormSubmit AJAX)
 - **Browser Webmail Shortcut**: Instant 1-click **"Open in Gmail Web"** option with recipient, subject, and message pre-filled directly in `mail.google.com`.
 - **Social Connect Hub**:
   - **Instagram**: `@starkayush_` with 1-click handle copy.
@@ -134,7 +134,7 @@ Synthesizing academic rigor with hands-on software development:
 ## 📂 Project Directory Structure
 
 ```text
-portfolio/
+My-Portfolio/
 ├── public/                 # Static assets & public brand icons
 ├── src/
 │   ├── components/
@@ -161,7 +161,7 @@ portfolio/
 
 ---
 
-## ⚡ Getting Started Locally
+###⚡ Getting Started Locally
 
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (version 18.0 or higher recommended)
@@ -172,7 +172,7 @@ portfolio/
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/starkayush/My-Portfolio.git
-   cd portfolio
+   cd My=Portfolio
    ```
 
 2. **Install project dependencies:**
