@@ -48,9 +48,8 @@ export const StorytellingSection: React.FC = () => {
               Cinematography
             </h2>
           </div>
-          <p className="text-sm text-neutral-400 max-w-md">
-            Translating human emotion and mechanical beauty into compelling visual stories through
-            the lens of cinematography, composition, and video pacing.
+          <p className="text-sm text-neutral-400 max-w-xl leading-relaxed">
+            Translating human emotion and mechanical beauty into compelling visual stories through the lens of cinematography, composition, and video pacing, though it&apos;s something more than a hobby to me. The cameras, the perspectives, the beauty, the lenses, a perfect shot (which doesn&apos;t ever exist) indeed, is what I want to master on the way.
           </p>
         </div>
 
