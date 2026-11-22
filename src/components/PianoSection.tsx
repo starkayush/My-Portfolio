@@ -434,8 +434,7 @@ export const PianoSection: React.FC = () => {
             </h2>
           </div>
           <p className="text-sm text-neutral-400 max-w-md">
-            Discovering the interplay between mathematical timing, frequency harmonics, polyphonic chord voicings,
-            and sweeping acoustic glissandos.
+            When I&apos;m not studying, you can usually find me in my room with a piano, giggling with the chords and the melodies that got stuck in my head at 2 a.m. the night before.
           </p>
         </div>
 
