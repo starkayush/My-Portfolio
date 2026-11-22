@@ -16,7 +16,7 @@
 
 <br />
 
-[Explore Live Demo](https://ayush-anand-portfolio.vercel.app) • [Direct Transmission](#-direct-communication--transmission-console) • [Technical Architecture](#-technical-architecture)
+[Explore Live Demo](https://my-portfolio-starkayush.vercel.app/) • [Direct Transmission](#-direct-communication--transmission-console) • [Technical Architecture](#-technical-architecture)
 
 ---
 
