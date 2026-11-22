@@ -161,18 +161,18 @@ My-Portfolio/
 
 ---
 
-### ⚡ Getting Started Locally
+## ⚡ Getting Started Locally
 
-### Prerequisites
+## Prerequisites
 - [Node.js](https://nodejs.org/) (version 18.0 or higher recommended)
 - `npm` or `pnpm`
 
-### Installation & Run
+## Installation & Run
 
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/starkayush/My-Portfolio.git
-   cd My=Portfolio
+   cd My-Portfolio
    ```
 
 2. **Install project dependencies:**
@@ -212,7 +212,6 @@ npx vercel
 **Ayush Anand**  
 *B.Tech in Computer Science & Engineering (Artificial Intelligence & Machine Learning)*
 
-- **Email:** [starayush.in@gmail.com](mailto:starayush.in@gmail.com)
 - **LinkedIn:** [linkedin.com/in/ayush-anand-864582427](https://www.linkedin.com/in/ayush-anand-864582427)
 - **GitHub:** [@starkayush](https://github.com/starkayush)
 - **Instagram:** [@starkayush_](https://www.instagram.com/starkayush_/)
