@@ -161,7 +161,7 @@ My-Portfolio/
 
 ---
 
-## ⚡ Getting Started Locally
+### ⚡ Getting Started Locally
 
 ## Prerequisites
 - [Node.js](https://nodejs.org/) (version 18.0 or higher recommended)
