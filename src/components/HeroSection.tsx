@@ -39,7 +39,7 @@ export const HeroSection: React.FC = () => {
             🏆 2x Hackathon Competitor
           </span>
           <span className="px-3.5 py-1 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300">
-            🚀 Vercel Deployment Specialist
+            🪄 A curious listener
           </span>
           <span className="px-3.5 py-1 rounded-md bg-neutral-900/80 border border-neutral-800 text-neutral-300">
             🔧 ECU Tuning & Engine Enthusiast
