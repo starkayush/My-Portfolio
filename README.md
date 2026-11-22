@@ -171,7 +171,7 @@ portfolio/
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/starkayush/portfolio.git
+   git clone https://github.com/starkayush/My-Portfolio.git
    cd portfolio
    ```
 
