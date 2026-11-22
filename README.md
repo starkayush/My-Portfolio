@@ -184,7 +184,7 @@ portfolio/
    ```bash
    npm run dev
    ```
-   Open [http://localhost:5173](http://localhost:5173) in your browser to experience the portfolio.
+   Open [https://my-portfolio-khaki-eight-89.vercel.app](https://my-portfolio-khaki-eight-89.vercel.app) in your browser to experience the portfolio.
 
 4. **Build for production:**
    ```bash
