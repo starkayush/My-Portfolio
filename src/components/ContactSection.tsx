@@ -9,7 +9,9 @@ import {
   MapPin, 
   Sparkles,
   ShieldCheck,
-  Code
+  Code,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 
 const InstagramIcon: React.FC<{ className?: string }> = ({ className = 'w-6 h-6' }) => (
@@ -46,7 +48,10 @@ export const ContactSection: React.FC = () => {
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedGithub, setCopiedGithub] = useState(false);
   const [copiedTwitter, setCopiedTwitter] = useState(false);
-  const [formSubmitted, setFormSubmitted] = useState(false);
+  const [submissionStatus, setSubmissionStatus] = useState<
+    'idle' | 'submitting' | 'success' | 'activation_needed' | 'error'
+  >('idle');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -81,24 +86,71 @@ export const ContactSection: React.FC = () => {
     setTimeout(() => setCopiedEmail(false), 2000);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormSubmitted(true);
-
-    // Direct transmission to starayush.in@gmail.com via mailto handler
-    const mailtoSubject = encodeURIComponent(formData.subject || `Portfolio Transmission from ${formData.name}`);
-    const mailtoBody = encodeURIComponent(
-      `Name: ${formData.name}\nEmail: ${formData.email}\nSubject: ${formData.subject}\n\nMessage:\n${formData.message}\n\n---\nSent via Ayush Anand Portfolio Transmission Console`
+  const generateGmailWebUrl = () => {
+    const subject = encodeURIComponent(formData.subject || `Portfolio Transmission from ${formData.name || 'Visitor'}`);
+    const body = encodeURIComponent(
+      `Name: ${formData.name || 'Not provided'}\nEmail: ${formData.email || 'Not provided'}\nSubject: ${formData.subject || 'Portfolio Inquiry'}\n\nMessage:\n${formData.message || ''}\n\n---\nSent via Ayush Anand Portfolio Transmission Console`
     );
-    const mailtoUrl = `mailto:${targetEmail}?subject=${mailtoSubject}&body=${mailtoBody}`;
+    return `https://mail.google.com/mail/?view=cm&fs=1&to=${targetEmail}&su=${subject}&body=${body}`;
+  };
 
-    // Trigger user's mail client directly to starayush.in@gmail.com
-    window.location.href = mailtoUrl;
+  const generateMailtoUrl = () => {
+    const subject = encodeURIComponent(formData.subject || `Portfolio Transmission from ${formData.name || 'Visitor'}`);
+    const body = encodeURIComponent(
+      `Name: ${formData.name || 'Not provided'}\nEmail: ${formData.email || 'Not provided'}\nSubject: ${formData.subject || 'Portfolio Inquiry'}\n\nMessage:\n${formData.message || ''}\n\n---\nSent via Ayush Anand Portfolio Transmission Console`
+    );
+    return `mailto:${targetEmail}?subject=${subject}&body=${body}`;
+  };
 
-    setTimeout(() => {
-      setFormData({ name: '', email: '', subject: '', message: '' });
-      setFormSubmitted(false);
-    }, 4500);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.email || !formData.message) return;
+
+    setSubmissionStatus('submitting');
+    setErrorMessage('');
+
+    try {
+      const response = await fetch(`https://formsubmit.co/ajax/${targetEmail}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          _replyto: formData.email,
+          _subject: formData.subject
+            ? `[Portfolio] ${formData.subject}`
+            : `[Portfolio Transmission] from ${formData.name}`,
+          message: formData.message,
+          _template: 'table',
+          _captcha: 'false',
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (data.success === 'true' || data.success === true) {
+        setSubmissionStatus('success');
+      } else if (
+        data.message &&
+        data.message.toLowerCase().includes('activation')
+      ) {
+        setSubmissionStatus('activation_needed');
+      } else if (response.ok) {
+        setSubmissionStatus('success');
+      } else {
+        setErrorMessage(data.message || 'Direct network transmission could not be completed.');
+        setSubmissionStatus('error');
+      }
+    } catch (err) {
+      console.error('Submission error:', err);
+      setErrorMessage(
+        'Unable to send directly over the network. You can dispatch immediately via Gmail Web or your email client below.'
+      );
+      setSubmissionStatus('error');
+    }
   };
 
   return (
@@ -337,21 +389,108 @@ export const ContactSection: React.FC = () => {
                 Transmit your message directly to my email (<span className="text-cyan-400 font-mono">{targetEmail}</span>). Whether for tech collaboration, AI systems, hackathons, or car tuning, I will reply promptly.
               </p>
 
-              {formSubmitted ? (
-                <div className="p-8 rounded-xl bg-emerald-950/40 border border-emerald-800 text-center animate-fade-in">
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-3">
-                    <Check className="w-6 h-6" />
+              {submissionStatus === 'success' ? (
+                <div className="p-8 rounded-2xl bg-emerald-950/30 border border-emerald-500/40 text-center animate-fade-in shadow-[0_0_30px_rgba(16,185,129,0.15)]">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto mb-4 border border-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.25)]">
+                    <Check className="w-7 h-7" />
                   </div>
-                  <h4 className="text-base font-bold text-white mb-1">Transmission Dispatched!</h4>
-                  <p className="text-xs text-neutral-300 mb-2">
-                    Your transmission has been forwarded directly to <span className="text-cyan-400 font-mono font-bold">{targetEmail}</span>.
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950 border border-emerald-800 text-[11px] font-mono text-emerald-300 uppercase tracking-widest mb-3">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    Direct Website Transmission Sent
+                  </div>
+                  <h4 className="text-xl font-bold text-white mb-2 font-['Cinzel',serif]">Transmission Delivered!</h4>
+                  <p className="text-xs text-neutral-300 max-w-md mx-auto mb-2 leading-relaxed">
+                    Your dispatch has been delivered directly to <span className="text-cyan-400 font-mono font-bold">{targetEmail}</span>.
                   </p>
-                  <p className="text-[11px] text-neutral-400">
-                    Your email application has been launched with your prefilled message.
+                  <p className="text-[11px] text-neutral-400 mb-6 font-mono">
+                    Ayush has received your message and will respond to <span className="text-neutral-200 font-medium">{formData.email}</span>.
                   </p>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      onClick={() => {
+                        setFormData({ name: '', email: '', subject: '', message: '' });
+                        setSubmissionStatus('idle');
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-medium text-xs transition-colors border border-neutral-700"
+                    >
+                      <span>Send Another Transmission</span>
+                    </button>
+                    <a
+                      href={generateGmailWebUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-2.5 rounded-xl bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-800/60 text-cyan-300 font-medium text-xs transition-colors flex items-center gap-1.5"
+                    >
+                      <span>Open Copy in Gmail Web</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </div>
+              ) : submissionStatus === 'activation_needed' ? (
+                <div className="p-8 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 text-center animate-fade-in shadow-[0_0_30px_rgba(6,182,212,0.15)]">
+                  <div className="w-14 h-14 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center mx-auto mb-4 border border-cyan-500/30">
+                    <Sparkles className="w-7 h-7" />
+                  </div>
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950 border border-cyan-800 text-[11px] font-mono text-cyan-300 uppercase tracking-widest mb-3">
+                    Direct Dispatch Initiated
+                  </div>
+                  <h4 className="text-xl font-bold text-white mb-2 font-['Cinzel',serif]">Transmission Forwarded!</h4>
+                  <p className="text-xs text-neutral-300 max-w-md mx-auto mb-3 leading-relaxed">
+                    Your dispatch has been queued to <span className="text-cyan-400 font-mono font-bold">{targetEmail}</span>. A one-time activation confirmation was sent to Ayush&apos;s email to authorize direct website submissions.
+                  </p>
+                  <p className="text-[11px] text-neutral-400 mb-6">
+                    You can also send a direct instant copy via your browser webmail or default client:
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center gap-3">
+                    <a
+                      href={generateGmailWebUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-6 py-2.5 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase hover:bg-neutral-200 transition-colors flex items-center gap-2 shadow-lg"
+                    >
+                      <span>Send Instant Copy via Gmail Web</span>
+                      <ArrowUpRight className="w-4 h-4" />
+                    </a>
+                    <button
+                      onClick={() => {
+                        setFormData({ name: '', email: '', subject: '', message: '' });
+                        setSubmissionStatus('idle');
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-medium text-xs transition-colors border border-neutral-700"
+                    >
+                      <span>Reset Form</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {submissionStatus === 'error' && (
+                    <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/80 text-left mb-4 flex items-start gap-3">
+                      <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                      <div className="text-xs flex-1">
+                        <div className="font-semibold text-red-300 mb-1">Direct Network Transmission Notice</div>
+                        <div className="text-neutral-300 mb-3">{errorMessage}</div>
+                        <div className="flex flex-wrap gap-2">
+                          <a
+                            href={generateGmailWebUrl()}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1.5 rounded-lg bg-red-900/60 hover:bg-red-800 border border-red-700 text-white font-mono text-[11px] flex items-center gap-1.5 transition-colors"
+                          >
+                            <span>Open in Gmail Web</span>
+                            <ArrowUpRight className="w-3.5 h-3.5" />
+                          </a>
+                          <a
+                            href={generateMailtoUrl()}
+                            className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 font-mono text-[11px] flex items-center gap-1.5 transition-colors"
+                          >
+                            <span>Use Default Mail Client</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[11px] font-mono uppercase tracking-wider text-neutral-400 mb-1.5">
@@ -411,12 +550,45 @@ export const ContactSection: React.FC = () => {
 
                   <button
                     type="submit"
+                    disabled={submissionStatus === 'submitting'}
                     data-cursor="view"
-                    className="w-full py-3.5 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase transition-all duration-300 hover:bg-neutral-200 hover:shadow-[0_0_25px_rgba(255,255,255,0.3)] flex items-center justify-center gap-2"
+                    className="w-full py-3.5 rounded-xl bg-white text-black font-semibold text-xs tracking-wider uppercase transition-all duration-300 hover:bg-neutral-200 hover:shadow-[0_0_25px_rgba(255,255,255,0.3)] flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <span>Transmit Message to starayush.in@gmail.com</span>
-                    <Send className="w-3.5 h-3.5" />
+                    {submissionStatus === 'submitting' ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-black" />
+                        <span>Transmitting Directly via Website...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Transmit Message Directly via Website</span>
+                        <Send className="w-3.5 h-3.5" />
+                      </>
+                    )}
                   </button>
+
+                  {/* Instant Webmail & Fallback Options */}
+                  <div className="pt-2 flex flex-wrap items-center justify-between gap-3 text-[11px] font-mono text-neutral-500 border-t border-neutral-800/60 mt-4">
+                    <span>Prefer sending via webmail?</span>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={generateGmailWebUrl()}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-cyan-400 hover:text-cyan-300 underline inline-flex items-center gap-1 transition-colors"
+                      >
+                        <span>Open in Gmail Web</span>
+                        <ArrowUpRight className="w-3 h-3" />
+                      </a>
+                      <span>•</span>
+                      <a
+                        href={generateMailtoUrl()}
+                        className="text-neutral-400 hover:text-white underline inline-flex items-center gap-1 transition-colors"
+                      >
+                        <span>Default Client</span>
+                      </a>
+                    </div>
+                  </div>
                 </form>
               )}
             </div>
