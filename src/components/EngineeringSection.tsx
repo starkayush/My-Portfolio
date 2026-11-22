@@ -11,7 +11,8 @@ import {
   Compass, 
   CheckCircle2, 
   ExternalLink,
-  Sparkles
+  Sparkles,
+  FileCode2
 } from 'lucide-react';
 
 export const EngineeringSection: React.FC = () => {
@@ -57,6 +58,16 @@ export const EngineeringSection: React.FC = () => {
       accent: 'from-indigo-500/20 to-purple-500/20',
       borderAccent: 'hover:border-indigo-400',
       icon: Globe,
+    },
+    {
+      title: 'HTML, CSS & Web Foundations',
+      category: 'dev',
+      badge: 'Web Fundamentals',
+      desc: 'Mastery of foundational web architecture: semantic HTML5 markup, responsive CSS3 styling & modern Flexbox/Grid layouts, along with core JavaScript for DOM interaction and dynamic browser events.',
+      tags: ['HTML5', 'CSS3', 'JavaScript', 'DOM Manipulation', 'Responsive Layouts'],
+      accent: 'from-orange-500/20 to-amber-500/20',
+      borderAccent: 'hover:border-orange-400',
+      icon: FileCode2,
     },
     {
       title: 'Prompt Websites & Vercel Edge',
