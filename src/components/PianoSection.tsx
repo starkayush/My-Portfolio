@@ -434,7 +434,7 @@ export const PianoSection: React.FC = () => {
             </h2>
           </div>
           <p className="text-sm text-neutral-400 max-w-md">
-            When I&apos;m not studying, you can usually find me in my room with a piano, giggling with the chords and the melodies that got stuck in my head at 2 a.m. the night before.
+            When I&apos;m into academics, you can usually find me in my room with a piano, giggling with the chords and the melodies that got stuck in my head at 2 a.m. the night before.
           </p>
         </div>
 
